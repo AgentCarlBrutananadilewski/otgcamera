@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- UVC camera device filter: class=video (0x0E), subclass=video interface (0x01) -->
+<resources>
+    <usb-device class="239" subclass="2" />
+</resources>

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OTG Camera</string>
+
+    <!-- States -->
+    <string name="no_device_title">No USB Camera Detected</string>
+    <string name="no_device_message">Plug in a USB OTG camera to get started.\n\nMake sure your device supports USB OTG and the camera is UVC-compatible.</string>
+    <string name="checking_device">Checking for USB cameras…</string>
+    <string name="device_connected">USB camera connected</string>
+    <string name="device_disconnected">USB camera disconnected</string>
+
+    <!-- Controls -->
+    <string name="controls_title">Camera Controls</string>
+    <string name="resolution_label">Resolution</string>
+    <string name="exposure_label">Exposure Time</string>
+    <string name="gain_label">Gain (ISO)</string>
+    <string name="white_balance_label">White Balance</string>
+    <string name="focus_mode_label">Focus Mode</string>
+    <string name="brightness_label">Brightness</string>
+    <string name="contrast_label">Contrast</string>
+    <string name="saturation_label">Saturation</string>
+    <string name="sharpness_label">Sharpness</string>
+
+    <!-- Modes -->
+    <string name="mode_auto">Auto</string>
+    <string name="mode_manual">Manual</string>
+    <string name="focus_continuous">Continuous AF</string>
+    <string name="focus_auto">Single AF</string>
+    <string name="focus_manual">Manual Focus</string>
+
+    <!-- Actions -->
+    <string name="capture_photo">Take Photo</string>
+    <string name="start_recording">Start Recording</string>
+    <string name="stop_recording">Stop Recording</string>
+    <string name="open_controls">Camera Controls</string>
+    <string name="close_controls">Close Controls</string>
+
+    <!-- Recording -->
+    <string name="recording_service_channel">Recording</string>
+    <string name="recording_service_title">Recording video…</string>
+    <string name="recording_stopped">Recording saved</string>
+    <string name="photo_saved">Photo saved</string>
+
+    <!-- Errors -->
+    <string name="error_capture_failed">Failed to capture photo</string>
+    <string name="error_recording_failed">Failed to start recording</string>
+    <string name="error_usb_permission_denied">USB permission denied. Please allow USB access.</string>
+</resources>

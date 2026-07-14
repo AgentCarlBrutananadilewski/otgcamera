@@ -1,0 +1,24 @@
+# Android Studio / Gradle
+*.iml
+.gradle/
+/local.properties
+/.idea/
+/build/
+/captures/
+
+# Kotlin
+*.class
+*.jar
+*.war
+*.ear
+
+# OS
+.DS_Store
+Thumbs.db
+
+# APKs
+*.apk
+*.aab
+
+# Logs
+*.log
