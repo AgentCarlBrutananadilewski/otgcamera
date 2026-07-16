@@ -11,17 +11,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.hilt.navigation.compose.hiltViewModel
 import com.toyrobotworkshop.otgcamera.util.FileSaver
 
 /**
  * Main camera screen — preview, capture button, and controls toggle.
+ *
+ * Receives a shared [viewModel] from NavGraph so ViewModel state (and the USB
+ * reconnect broadcast receiver) survives navigation to/from NoDeviceScreen.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CameraScreen(
-    viewModel: CameraViewModel = hiltViewModel(),
-    onNoDevice: () -> Unit,
+    viewModel: CameraViewModel,
     onSettingsClick: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -29,24 +30,11 @@ fun CameraScreen(
 
     var showControls by remember { mutableStateOf(false) }
 
-    val hasCameraPermission = ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.CAMERA
-    ) == PackageManager.PERMISSION_GRANTED
-
     // Auto-detect camera on launch
     LaunchedEffect(Unit) {
         viewModel.detectAndInitialize(context)
     }
 
-    // Handle no device case
-    LaunchedEffect(uiState.status) {
-        if (uiState.status == CameraStatus.NoCamera) {
-            onNoDevice()
-        }
-    }
-
-    // Show status message during initialization
     val statusMessage = uiState.message?.takeIf { it.isNotEmpty() }
 
     Scaffold(
@@ -77,12 +65,15 @@ fun CameraScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            // Camera preview surface — only show when camera is actually ready or previewing
             val isCameraReady = uiState.status == CameraStatus.Ready ||
                     uiState.status == CameraStatus.Previewing
+
             if (isCameraReady) {
                 PreviewView(
                     modifier = Modifier.fillMaxSize(),
+                    // Pass the known camera resolution so PreviewView can letterbox/pillarbox
+                    // the preview instead of stretching it to fill the view.
+                    cameraResolution = uiState.resolution,
                     onSurfaceReady = { surfaceTexture ->
                         viewModel.setPreviewSurface(surfaceTexture)
                     },
@@ -98,9 +89,7 @@ fun CameraScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator()
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
@@ -185,7 +174,6 @@ private fun CameraControlsBar(
             .fillMaxWidth()
             .padding(32.dp),
     ) {
-        // Gallery thumbnail (last captured photo)
         IconButton(onClick = { /* TODO: show gallery */ }) {
             Icon(
                 painter = painterResource(android.R.drawable.ic_menu_gallery),
@@ -194,7 +182,6 @@ private fun CameraControlsBar(
             )
         }
 
-        // Capture / Record button
         if (isRecording) {
             ExtendedFloatingActionButton(
                 onClick = onStopRecording,
@@ -211,7 +198,6 @@ private fun CameraControlsBar(
             }
         }
 
-        // Video mode toggle
         IconButton(onClick = { /* TODO: toggle video mode */ }) {
             Icon(
                 painter = painterResource(android.R.drawable.ic_menu_camera),

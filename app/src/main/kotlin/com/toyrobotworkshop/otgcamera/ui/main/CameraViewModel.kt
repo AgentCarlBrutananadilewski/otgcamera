@@ -1,14 +1,19 @@
 package com.toyrobotworkshop.otgcamera.ui.main
 
 import android.app.Application
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.SurfaceTexture
 import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbManager
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.toyrobotworkshop.otgcamera.camera.CameraInterface
 import com.toyrobotworkshop.otgcamera.camera.CameraManager
+import com.toyrobotworkshop.otgcamera.util.UsbReceiver
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,15 +40,79 @@ class CameraViewModel @Inject constructor(
     // Camera interface (set after backend detection)
     private var camera: CameraInterface? = null
 
-    // SurfaceTexture from PreviewView — used to create Surface for preview
+    // SurfaceTexture from PreviewView
     private var surfaceTexture: SurfaceTexture? = null
+
+    // Broadcast receiver for USB plug/unplug events from UsbReceiver
+    private val usbEventReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                UsbReceiver.ACTION_USB_CAMERA_FOUND -> {
+                    val device = intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE)
+                    Log.d(tag, "USB camera found broadcast: ${device?.deviceName}")
+                    // Only re-initialize if we're not already running
+                    val status = _uiState.value.status
+                    if (status == CameraStatus.NoCamera || status == CameraStatus.Idle ||
+                        status is CameraStatus.Error) {
+                        Log.d(tag, "Camera reconnected — re-initializing")
+                        // detectAndInitialize needs an Activity context for the permission dialog.
+                        // We pass the app context here; the USB permission should already be
+                        // granted for a reconnect so it won't need to show a dialog.
+                        detectAndInitialize(context.applicationContext)
+                    }
+                }
+
+                UsbReceiver.ACTION_USB_CAMERA_LOST -> {
+                    Log.d(tag, "USB camera lost broadcast")
+                    handleCameraDisconnected()
+                }
+            }
+        }
+    }
+
+    init {
+        // Register for USB plug/unplug events posted by UsbReceiver
+        val filter = IntentFilter().apply {
+            addAction(UsbReceiver.ACTION_USB_CAMERA_FOUND)
+            addAction(UsbReceiver.ACTION_USB_CAMERA_LOST)
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            application.registerReceiver(usbEventReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            application.registerReceiver(usbEventReceiver, filter)
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        try { getApplication<Application>().unregisterReceiver(usbEventReceiver) } catch (_: Exception) {}
+        camera?.release()
+        camera = null
+    }
+
+    /**
+     * Called when the camera is physically disconnected.
+     * Tears down the camera, resets state, and surfaces the disconnected status to the UI
+     * so the user sees feedback and reconnection can be attempted.
+     */
+    private fun handleCameraDisconnected() {
+        Log.d(tag, "Handling camera disconnection")
+        // UVCBackend.onDisconnect() already calls destroy() and resets its own state to Idle.
+        // We still call release() to clean up the USBMonitor and handler thread cleanly.
+        camera?.release()
+        camera = null
+        surfaceTexture = null
+        _uiState.value = CameraUiState(
+            status = CameraStatus.NoCamera,
+            message = "Camera disconnected. Reconnect the USB camera to continue.",
+        )
+    }
 
     /**
      * Called when the app starts or when USB device state changes.
      * Guards against re-initialization — if camera is already ready/previewing, skips.
      */
-    fun detectAndInitialize(activityContext: android.content.Context) {
-        // Don't re-initialize if already working
+    fun detectAndInitialize(activityContext: Context) {
         val currentStatus = _uiState.value.status
         if (currentStatus == CameraStatus.Ready ||
             currentStatus == CameraStatus.Previewing ||
@@ -82,9 +151,11 @@ class CameraViewModel @Inject constructor(
         try {
             _uiState.value = _uiState.value.copy(status = CameraStatus.Initializing)
             camera = cameraManager.initializeCamera2(cameraId)
+            val cam = camera!!
             _uiState.value = _uiState.value.copy(
                 status = CameraStatus.Ready,
                 backendType = CameraInterface.BackendType.CAMERA2,
+                resolution = cam.resolution,
                 message = "Camera2 backend initialized"
             )
         } catch (e: Exception) {
@@ -97,36 +168,35 @@ class CameraViewModel @Inject constructor(
     }
 
     /**
-     * Initialize UVC backend — always proceeds, letting the backend handle
-     * permission requests asynchronously. Polls for state changes.
-     *
-     * @param activityContext Activity context required for USB permission dialog.
+     * Initialize UVC backend asynchronously, polling for the backend to become ready.
+     * The backend handles the USB permission dialog itself; we just wait for it.
      */
-    private suspend fun initializeUVC(device: UsbDevice, activityContext: android.content.Context) {
+    private suspend fun initializeUVC(device: UsbDevice, activityContext: Context) {
         try {
             _uiState.value = _uiState.value.copy(
                 status = CameraStatus.Initializing,
                 message = "Requesting USB permission..."
             )
 
-            // Pass Activity context so the USB permission dialog can be shown
             camera = cameraManager.initializeUVC(device, activityContext)
 
-            // Poll for the backend to transition to Ready (permission granted + camera opened)
             var attempts = 0
-            val maxAttempts = 30 // 3 seconds total
+            val maxAttempts = 30 // 3 seconds
             while (attempts < maxAttempts) {
                 delay(100)
                 attempts++
 
                 when (val state = camera?.state) {
                     is CameraInterface.State.Ready -> {
+                        val cam = camera!!
                         _uiState.value = _uiState.value.copy(
                             status = CameraStatus.Ready,
                             backendType = CameraInterface.BackendType.UVCCAMERA,
+                            // Expose the actual resolution so PreviewView can constrain its aspect ratio
+                            resolution = cam.resolution,
                             message = "UVC camera ready"
                         )
-                        Log.d(tag, "UVC backend ready after $attempts attempts")
+                        Log.d(tag, "UVC backend ready after $attempts attempts, resolution=${cam.resolution}")
                         return
                     }
 
@@ -139,7 +209,6 @@ class CameraViewModel @Inject constructor(
                     }
 
                     else -> {
-                        // Still initializing — keep polling
                         if (attempts % 10 == 0) {
                             _uiState.value = _uiState.value.copy(
                                 message = "Waiting for USB permission..."
@@ -149,7 +218,6 @@ class CameraViewModel @Inject constructor(
                 }
             }
 
-            // Timeout
             _uiState.value = _uiState.value.copy(
                 status = CameraStatus.Error("Timeout waiting for USB camera"),
                 message = "Permission dialog may have been dismissed"
@@ -177,7 +245,6 @@ class CameraViewModel @Inject constructor(
             Log.w(tag, "No camera initialized")
             return
         }
-
         val st = surfaceTexture ?: run {
             Log.w(tag, "No surface texture available")
             return
@@ -186,14 +253,14 @@ class CameraViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 _uiState.value = _uiState.value.copy(status = CameraStatus.Starting)
-                // Pass SurfaceTexture directly — UVC backend uses setPreviewTexture(),
-                // Camera2 backend wraps it in a Surface internally.
                 cam.startPreview(st)
                 _uiState.value = _uiState.value.copy(
                     status = CameraStatus.Previewing,
+                    // Keep resolution in state so PreviewView keeps correct aspect ratio
+                    resolution = cam.resolution,
                     message = null
                 )
-                Log.d(tag, "Preview started")
+                Log.d(tag, "Preview started at ${cam.resolution}")
             } catch (e: Exception) {
                 Log.e(tag, "Failed to start preview", e)
                 _uiState.value = _uiState.value.copy(
@@ -209,20 +276,11 @@ class CameraViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 cam.stopPreview()
-                _uiState.value = _uiState.value.copy(
-                    status = CameraStatus.Ready,
-                    message = null
-                )
+                _uiState.value = _uiState.value.copy(status = CameraStatus.Ready, message = null)
             } catch (e: Exception) {
                 Log.e(tag, "Failed to stop preview", e)
             }
         }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        camera?.release()
-        camera = null
     }
 
     fun capturePhoto(path: String) {
@@ -245,6 +303,8 @@ data class CameraUiState(
     val status: CameraStatus = CameraStatus.Idle,
     val backendType: CameraInterface.BackendType? = null,
     val message: String? = null,
+    // Actual camera resolution — used by PreviewView to maintain correct aspect ratio.
+    // Null until the camera is Ready (resolution is unknown before then).
     val resolution: com.toyrobotworkshop.otgcamera.camera.Size? = null,
 )
 
