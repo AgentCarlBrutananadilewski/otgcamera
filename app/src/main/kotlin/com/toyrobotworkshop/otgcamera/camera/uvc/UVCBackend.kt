@@ -39,7 +39,10 @@ class UVCBackend @Inject constructor(
 ) : CameraInterface {
 
     private val tag = "UVCBackend"
-    private val USB_PERMISSION_ACTION = "android.hardware.usb.action.USB_PERMISSION"
+    // Use the same action string as the PendingIntent so the BroadcastReceiver actually receives it.
+    // The system-level "android.hardware.usb.action.USB_PERMISSION" is NOT what UsbManager sends
+    // back — it sends to the custom action on the PendingIntent we provide.
+    private val USB_PERMISSION_ACTION get() = "${appContext.packageName}.USB_PERMISSION"
 
     // UVCCamera library objects
     private var usbMonitor: USBMonitor? = null
@@ -144,16 +147,21 @@ class UVCBackend @Inject constructor(
             }
         })
 
-        // Check if we already have permission — if so, register and open directly
+        // Check if we already have permission — if so, open device BEFORE registering USBMonitor.
+        // USBMonitor.register() posts mDeviceCheckRunnable to fire 1s later, which iterates
+        // connected devices and opens them. If we call openDevice() AFTER register(), the
+        // runnable may have already claimed the interface, causing UVCCamera.open() to fail
+        // with ECONNREFUSED (-99) because the UVC interface can only be exclusively claimed once.
+        // By opening first, mCtrlBlocks is populated so the runnable finds it cached and skips.
         val usbManager = appContext.getSystemService(Context.USB_SERVICE) as UsbManager
         val hasPerm = usbManager.hasPermission(device)
         DiagnosticLogger.perm("hasPermission(${device.deviceName}) = $hasPerm")
         if (hasPerm) {
-            Log.d(tag, "Already have USB permission, registering monitor and opening directly")
-            DiagnosticLogger.perm("Already have permission — registering and opening")
-            usbMonitor?.register()
+            Log.d(tag, "Already have USB permission — opening device BEFORE register() to avoid race")
+            DiagnosticLogger.perm("Already have permission — openDevice() then register()")
             val cb = usbMonitor?.openDevice(device)
             if (cb != null) {
+                usbMonitor?.register() // register AFTER so detach watcher works but no race
                 openCamera(cb)
             } else {
                 _state = CameraInterface.State.Error("Failed to open USB device")
@@ -234,12 +242,14 @@ class UVCBackend @Inject constructor(
                     permissionReceiver = null
 
                     if (granted && dev == connectedDevice) {
-                        // Permission granted — register monitor then open the camera
-                        Log.d(tag, "Permission granted — registering USBMonitor and opening device")
-                        DiagnosticLogger.perm("GRANTED — registering USBMonitor and opening device")
-                        usbMonitor?.register()
+                        // Permission granted — open device BEFORE registering USBMonitor.
+                        // Same race as above: register() spawns mDeviceCheckRunnable which
+                        // competes for the interface claim. Open first, register after.
+                        Log.d(tag, "Permission granted — opening device BEFORE register()")
+                        DiagnosticLogger.perm("GRANTED — openDevice() then register()")
                         val cb = usbMonitor?.openDevice(dev)
                         if (cb != null) {
+                            usbMonitor?.register() // register AFTER so detach watcher works
                             DiagnosticLogger.camera("openDevice succeeded, calling openCamera()")
                             openCamera(cb)
                         } else {
