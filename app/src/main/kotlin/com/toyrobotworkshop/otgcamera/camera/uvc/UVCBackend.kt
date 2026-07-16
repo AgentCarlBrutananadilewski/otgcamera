@@ -53,6 +53,13 @@ class UVCBackend @Inject constructor(
     private var cameraHandlerThread: HandlerThread? = null
     private var cameraHandler: Handler? = null
 
+    // The frame format actually supported by the connected camera.
+    // Set during openCamera() after probing both MJPEG (type=6) and YUYV (type=4) descriptors.
+    // Must be passed to setPreviewSize() — using the wrong format here is what caused
+    // "Failed to set preview size" when cameras only support YUYV but mCurrentFrameFormat
+    // defaults to FRAME_FORMAT_MJPEG inside the UVCCamera library.
+    private var activeFrameFormat: Int = com.serenegiant.usb.UVCCamera.FRAME_FORMAT_YUYV
+
     // State
     private var _state: CameraInterface.State = CameraInterface.State.Idle
     override val state: CameraInterface.State
@@ -328,20 +335,41 @@ class UVCBackend @Inject constructor(
                     open(ctrlBlock)
                     DiagnosticLogger.camera("UVCCamera.open() succeeded")
 
-                    // Discover supported preview sizes
-                    val displaySizes = getSupportedSizeList()
-                    DiagnosticLogger.camera("getSupportedSizeList() returned ${displaySizes.size} sizes")
-                    if (displaySizes.isEmpty()) {
-                        DiagnosticLogger.camera("WARNING: Camera reports ZERO supported sizes — this is suspicious")
-                        DiagnosticLogger.camera("Camera device name: ${ctrlBlock.deviceName}")
-                        connectedDevice?.let { dev ->
-                            DiagnosticLogger.camera("Camera vendorId: ${Integer.toHexString(dev.vendorId)}")
-                            DiagnosticLogger.camera("Camera productId: ${Integer.toHexString(dev.productId)}")
-                        }
+                    // Discover supported preview sizes — must probe both format types.
+                    //
+                    // Root cause of "Failed to set preview size":
+                    //   UVCCamera.mCurrentFrameFormat defaults to FRAME_FORMAT_MJPEG (1).
+                    //   getSupportedSizeList() maps that to descriptor type 6 (MJPEG).
+                    //   Many cameras — including VID=1908 PID=2311 — only advertise YUYV
+                    //   (descriptor type 4). The MJPEG query returns 0 sizes, the fallback
+                    //   640×480 is chosen, then setPreviewSize() calls nativeSetPreviewSize
+                    //   still using mCurrentFrameFormat=MJPEG=1 → the native layer looks for
+                    //   an MJPEG descriptor at that resolution, finds none, returns non-zero,
+                    //   and the Java wrapper throws IllegalArgumentException("Failed to set
+                    //   preview size"). The camera never had MJPEG support at all.
+                    //
+                    // Fix: query MJPEG first (type 6), then YUYV (type 4). Record whichever
+                    // has sizes as activeFrameFormat so startPreview can pass the right format
+                    // to setPreviewSize(w, h, format) and nativeSetPreviewSize picks the
+                    // correct descriptor.
+                    val supportedJson = getSupportedSize() // raw JSON string from native layer
+                    DiagnosticLogger.camera("Raw supportedSize JSON length: ${supportedJson?.length ?: 0}")
+
+                    val mjpegSizes = com.serenegiant.usb.UVCCamera.getSupportedSize(6, supportedJson)
+                    val yuyvSizes  = com.serenegiant.usb.UVCCamera.getSupportedSize(4, supportedJson)
+                    DiagnosticLogger.camera("MJPEG sizes (type=6): ${mjpegSizes.size}, YUYV sizes (type=4): ${yuyvSizes.size}")
+
+                    // Prefer MJPEG (better compression → higher fps on USB 2.0), fall back to YUYV
+                    val (chosenSizes, chosenFormat) = when {
+                        mjpegSizes.isNotEmpty() -> Pair(mjpegSizes, com.serenegiant.usb.UVCCamera.FRAME_FORMAT_MJPEG)
+                        yuyvSizes.isNotEmpty()  -> Pair(yuyvSizes,  com.serenegiant.usb.UVCCamera.FRAME_FORMAT_YUYV)
+                        else                    -> Pair(emptyList(), com.serenegiant.usb.UVCCamera.FRAME_FORMAT_YUYV)
                     }
+                    activeFrameFormat = chosenFormat
+                    DiagnosticLogger.camera("Chosen format: ${if (chosenFormat == com.serenegiant.usb.UVCCamera.FRAME_FORMAT_MJPEG) "MJPEG" else "YUYV"} (${chosenSizes.size} sizes)")
 
                     _supportedResolutions.clear()
-                    displaySizes.forEach { size ->
+                    chosenSizes.forEach { size ->
                         _supportedResolutions.add(Size(size.width, size.height))
                     }
 
@@ -351,15 +379,22 @@ class UVCBackend @Inject constructor(
                         // Pick highest resolution that's reasonable (cap at 1080p)
                         val reasonable = _supportedResolutions.filter { it.width <= 1920 && it.height <= 1080 }
                         resolution = reasonable.maxByOrNull { it.width * it.height }
-                            ?: Size(640, 480)
+                            ?: _supportedResolutions.first()
                     } else {
-                        // Fallback — try common sizes
-                        DiagnosticLogger.camera("No supported sizes found, falling back to 640x480")
+                        // Camera reported no sizes at all — try 640×480 YUYV as last resort.
+                        // Log the raw JSON so we have something to debug with.
+                        DiagnosticLogger.camera("WARNING: camera reports ZERO sizes in both MJPEG and YUYV")
+                        DiagnosticLogger.camera("Camera: ${ctrlBlock.deviceName}")
+                        connectedDevice?.let { dev ->
+                            DiagnosticLogger.camera("VID=${Integer.toHexString(dev.vendorId)} PID=${Integer.toHexString(dev.productId)}")
+                        }
+                        DiagnosticLogger.camera("Raw JSON (first 500 chars): ${supportedJson?.take(500)}")
+                        activeFrameFormat = com.serenegiant.usb.UVCCamera.FRAME_FORMAT_YUYV
                         resolution = Size(640, 480)
                     }
 
                     DiagnosticLogger.camera("Selected resolution: ${resolution.width}x${resolution.height}")
-                    Log.d(tag, "UVC camera opened on $threadName, ${_supportedResolutions.size} resolutions available: ${_supportedResolutions}, selected: ${resolution.width}x${resolution.height}")
+                    Log.d(tag, "UVC camera opened on $threadName, format=${activeFrameFormat}, ${_supportedResolutions.size} resolutions: ${_supportedResolutions}, selected: ${resolution.width}x${resolution.height}")
                 }
             } catch (e: Exception) {
                 Log.e(tag, "Failed to open UVC camera", e)
@@ -391,9 +426,13 @@ class UVCBackend @Inject constructor(
             DiagnosticLogger.camera("startPreview executing on handler thread: $threadName (ID=${Thread.currentThread().id})")
 
             try {
-                // Step 1: Set preview size first
-                DiagnosticLogger.camera("Step 1: setPreviewSize(${resolution.width}x${resolution.height})")
-                camera.setPreviewSize(resolution.width, resolution.height)
+                // Step 1: Set preview size — must pass the format discovered during openCamera().
+                // The no-arg overload uses mCurrentFrameFormat which defaults to FRAME_FORMAT_MJPEG
+                // even on cameras that only support YUYV, causing nativeSetPreviewSize to fail
+                // with "Failed to set preview size". Always use the explicit format overload.
+                val formatName = if (activeFrameFormat == com.serenegiant.usb.UVCCamera.FRAME_FORMAT_MJPEG) "MJPEG" else "YUYV"
+                DiagnosticLogger.camera("Step 1: setPreviewSize(${resolution.width}x${resolution.height}, format=$formatName)")
+                camera.setPreviewSize(resolution.width, resolution.height, activeFrameFormat)
                 DiagnosticLogger.camera("Step 1 OK — setPreviewSize succeeded")
 
                 // Step 2: Use setPreviewTexture() instead of setPreviewDisplay(Surface) —
