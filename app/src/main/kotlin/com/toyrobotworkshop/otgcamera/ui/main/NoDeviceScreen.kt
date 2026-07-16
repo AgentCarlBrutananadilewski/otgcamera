@@ -5,6 +5,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
@@ -23,7 +24,7 @@ fun NoDeviceScreen(
             .padding(32.dp),
     ) {
         Icon(
-            imageVector = Icons.Default.CameraAlt,
+            painter = painterResource(android.R.drawable.ic_menu_camera),
             contentDescription = "No camera",
             modifier = Modifier.size(96.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,

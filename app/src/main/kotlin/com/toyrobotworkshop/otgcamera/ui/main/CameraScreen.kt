@@ -2,13 +2,13 @@ package com.toyrobotworkshop.otgcamera.ui.main
 
 import android.Manifest
 import android.content.pm.PackageManager
-import androidx.activity.compose.rememberLauncherForPermission
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -22,43 +22,47 @@ import com.toyrobotworkshop.otgcamera.util.FileSaver
 fun CameraScreen(
     viewModel: CameraViewModel = hiltViewModel(),
     onNoDevice: () -> Unit,
+    onSettingsClick: () -> Unit,
 ) {
     val context = LocalContext.current
-    val backendResult by viewModel.backendResult.collectAsState()
-    val cameraInterface by viewModel.cameraInterface.collectAsState()
-    val state by viewModel.state.collectAsState()
-    val error by viewModel.error.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
 
     var showControls by remember { mutableStateOf(false) }
-    var isRecording by derivedStateOf { state == CameraState.Recording }
-
-    // Camera permission check
-    val cameraPermissionLauncher = rememberLauncherForPermission(
-        permission = Manifest.permission.CAMERA,
-        onGranted = { /* permission granted */ },
-        onDenied = { /* handle denial */ },
-    )
 
     val hasCameraPermission = ContextCompat.checkSelfPermission(
         context,
         Manifest.permission.CAMERA
     ) == PackageManager.PERMISSION_GRANTED
 
-    // Auto-open camera when backend is detected and permission is granted
-    LaunchedEffect(backendResult, hasCameraPermission) {
-        if (backendResult !is CameraManager.BackendResult.None && hasCameraPermission) {
-            viewModel.openCamera()
-        }
+    // Auto-detect camera on launch
+    LaunchedEffect(Unit) {
+        viewModel.detectAndInitialize(context)
     }
 
     // Handle no device case
-    LaunchedEffect(backendResult) {
-        if (backendResult is CameraManager.BackendResult.None) {
+    LaunchedEffect(uiState.status) {
+        if (uiState.status == CameraStatus.NoCamera) {
             onNoDevice()
         }
     }
 
+    // Show status message during initialization
+    val statusMessage = uiState.message?.takeIf { it.isNotEmpty() }
+
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("OTG Camera") },
+                actions = {
+                    IconButton(onClick = onSettingsClick) {
+                        Icon(
+                            painter = painterResource(android.R.drawable.ic_menu_preferences),
+                            contentDescription = "Settings",
+                        )
+                    }
+                },
+            )
+        },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showControls = !showControls },
@@ -73,8 +77,10 @@ fun CameraScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            // Camera preview surface
-            if (cameraInterface != null || state == CameraState.Opening) {
+            // Camera preview surface — only show when camera is actually ready or previewing
+            val isCameraReady = uiState.status == CameraStatus.Ready ||
+                    uiState.status == CameraStatus.Previewing
+            if (isCameraReady) {
                 PreviewView(
                     modifier = Modifier.fillMaxSize(),
                     onSurfaceReady = { surfaceTexture ->
@@ -86,24 +92,58 @@ fun CameraScreen(
                 )
             }
 
-            // Error overlay
-            error?.let { errorMsg ->
-                Snackbar(
-                    modifier = Modifier.align(Alignment.BottomCenter),
-                    action = {
-                        TextButton(onClick = { /* dismiss */ }) {
-                            Text("Dismiss")
-                        }
-                    },
+            // Initializing overlay
+            if (uiState.status == CameraStatus.Initializing || uiState.status == CameraStatus.Detecting) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Text(errorMsg)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        CircularProgressIndicator()
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = statusMessage ?: "Initializing camera...",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            // Error overlay
+            if (uiState.status is CameraStatus.Error) {
+                val errorMsg = (uiState.status as CameraStatus.Error).message
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(32.dp),
+                    ) {
+                        Text(
+                            text = "Camera Error",
+                            style = MaterialTheme.typography.headlineSmall,
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = errorMsg,
+                            color = MaterialTheme.colorScheme.error,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(onClick = { viewModel.detectAndInitialize(context) }) {
+                            Text("Retry")
+                        }
+                    }
                 }
             }
 
             // Bottom controls bar
-            if (cameraInterface != null) {
+            if (uiState.status == CameraStatus.Ready || uiState.status == CameraStatus.Previewing) {
                 CameraControlsBar(
-                    isRecording = isRecording,
+                    isRecording = false, // TODO: track recording state
                     onCapturePhoto = {
                         val path = FileSaver.getPhotoPath(context.cacheDir)
                         viewModel.capturePhoto(path)
@@ -119,28 +159,10 @@ fun CameraScreen(
                 )
             }
 
-            // Recording indicator
-            if (isRecording) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 48.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Circle,
-                        contentDescription = "Recording",
-                        tint = MaterialTheme.colorScheme.error,
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("00:00", color = MaterialTheme.colorScheme.onSurface)
-                }
-            }
-
             // Controls bottom sheet
             if (showControls) {
                 ControlsSheet(
-                    cameraInterface = cameraInterface,
+                    cameraInterface = null, // TODO: expose from ViewModel
                     onDismiss = { showControls = false },
                 )
             }

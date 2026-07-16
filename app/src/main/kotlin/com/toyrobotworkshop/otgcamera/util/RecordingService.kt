@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.Binder
+import android.os.IBinder
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.toyrobotworkshop.otgcamera.R

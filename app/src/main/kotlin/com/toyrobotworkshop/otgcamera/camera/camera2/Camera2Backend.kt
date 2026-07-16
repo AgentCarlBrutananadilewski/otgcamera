@@ -3,6 +3,7 @@ package com.toyrobotworkshop.otgcamera.camera.camera2
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.ImageFormat
+import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
 import android.media.Image
 import android.media.ImageReader
@@ -68,7 +69,7 @@ class Camera2Backend @Inject constructor(
 
     override var controls: CameraControls = CameraControls()
     override val isCapturingPhoto: Boolean
-        get() = _state is CameraInterface.State.Capturing
+        get() = false // TODO: track capture state
     override val isRecording: Boolean
         get() = _state is CameraInterface.State.Recording
 
@@ -103,7 +104,8 @@ class Camera2Backend @Inject constructor(
     }
 
     @SuppressLint("MissingPermission")
-    override suspend fun startPreview(surface: Surface) {
+    override suspend fun startPreview(surfaceTexture: SurfaceTexture) {
+        val surface = Surface(surfaceTexture)
         val cameraId = cameraId ?: throw IllegalStateException("Camera not initialized")
 
         // If camera isn't open yet, store the surface and open it
@@ -191,7 +193,7 @@ class Camera2Backend @Inject constructor(
     }
 
     private fun startPreviewRepeating(session: CameraCaptureSession) {
-        val builder = cameraDevice?.createCaptureRequest(CameraCaptureSession.TEMPLATE_PREVIEW)
+        val builder = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
             ?: return
 
         builder.addTarget(previewSurface!!)
@@ -221,32 +223,13 @@ class Camera2Backend @Inject constructor(
         _state = CameraInterface.State.Ready(CameraInterface.BackendType.CAMERA2)
     }
 
-    override suspend fun setPreviewSurface(surface: Surface?) {
-        if (surface == null) {
-            stopPreview()
-            return
-        }
-
-        if (cameraDevice != null && captureSession != null) {
-            // Camera is already open — rebuild session with new surface
-            previewSurface = surface
-            createCaptureSession(surface)
-        } else {
-            // Store for later when camera opens
-            pendingSurface = surface
-        }
-    }
-
     override suspend fun capturePhoto(path: String): Result<Unit> = runCatching {
         Log.d(tag, "Capturing photo to $path")
-        _state = CameraInterface.State.Capturing
 
         // TODO: Create a one-shot capture request targeting ImageReader
         // For now, we'll use the existing ImageReader surface which is already
         // part of the repeating request. We need to switch to a burst capture
         // or a one-shot request with JPEG output.
-
-        _state = CameraInterface.State.Previewing
     }
 
     override suspend fun startRecording(path: String): Result<Unit> = runCatching {
@@ -270,7 +253,7 @@ class Camera2Backend @Inject constructor(
         val session = captureSession ?: return
         val device = cameraDevice ?: return
 
-        val builder = device.createCaptureRequest(CameraCaptureSession.TEMPLATE_PREVIEW)
+        val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
         builder.addTarget(previewSurface!!)
         builder.addTarget(imageReader!!.surface)
         applyControlsToRequest(builder)

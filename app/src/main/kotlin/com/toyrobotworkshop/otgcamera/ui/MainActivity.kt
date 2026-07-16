@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
 import com.toyrobotworkshop.otgcamera.ui.navigation.NavGraph
 import com.toyrobotworkshop.otgcamera.ui.theme.OtgCameraTheme
@@ -20,7 +21,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             OtgCameraTheme {
                 Surface(
-                    modifier = androidx.compose.foundation.layout.Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize(),
                 ) {
                     val navController = rememberNavController()
                     NavGraph(navController = navController)

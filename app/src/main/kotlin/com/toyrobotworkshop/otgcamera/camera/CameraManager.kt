@@ -54,17 +54,46 @@ class CameraManager @Inject constructor(
 
     /**
      * Check if any UVC-compatible USB device is connected.
+     *
+     * Handles both direct UVC devices (class=0x0E at device level) and
+     * IAD-based composite devices (class=239 with UVC interfaces).
      */
     fun findUvcDevice(): UsbDevice? {
         val usbManager = context.getSystemService(UsbManager::class.java)
         for (device in usbManager.deviceList.values) {
-            // UVC devices: class=video (0x0E), subclass=video interface (0x01)
-            if (device.classType == 0x0E && device.subclass == 0x01) {
+            if (isUvcDevice(device)) {
                 Log.d(tag, "Found UVC device: ${device.deviceName}")
                 return device
             }
         }
         return null
+    }
+
+    /**
+     * Check if a USB device is a UVC camera.
+     */
+    private fun isUvcDevice(device: UsbDevice): Boolean {
+        // Direct UVC device (class at device level)
+        if (device.deviceClass == 0x0E && device.deviceSubclass == 0x03) {
+            return true
+        }
+
+        // IAD-based UVC device (common for composite devices)
+        if (device.deviceClass == 239 && device.deviceSubclass == 2) {
+            return true
+        }
+
+        // Some cheap cameras report class=0 at device level — check interfaces
+        if (device.deviceClass == 0) {
+            for (i in 0 until device.interfaceCount) {
+                val iface = device.getInterface(i)
+                if (iface.getInterfaceClass() == 0x0E && iface.getInterfaceSubclass() == 0x03) {
+                    return true
+                }
+            }
+        }
+
+        return false
     }
 
     /**
@@ -97,11 +126,11 @@ class CameraManager @Inject constructor(
 
     /**
      * Initialize and return the UVC backend for a specific USB device.
+     * NOTE: Must be called on the main thread — USB permission dialogs require it.
      */
-    suspend fun initializeUVC(device: UsbDevice): CameraInterface {
-        withContext(Dispatchers.IO) {
-            uvcBackend.initialize(device)
-        }
+    suspend fun initializeUVC(device: UsbDevice, activityContext: Context? = null): CameraInterface {
+        // DO NOT wrap in Dispatchers.IO — USB permission dialog must be shown on main thread
+        uvcBackend.initialize(device, activityContext)
         return uvcBackend
     }
 

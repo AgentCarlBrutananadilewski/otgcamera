@@ -6,6 +6,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.toyrobotworkshop.otgcamera.ui.main.CameraScreen
 import com.toyrobotworkshop.otgcamera.ui.main.NoDeviceScreen
+import com.toyrobotworkshop.otgcamera.ui.settings.SettingsScreen
 
 /**
  * Routes in the app.
@@ -13,6 +14,7 @@ import com.toyrobotworkshop.otgcamera.ui.main.NoDeviceScreen
 object Routes {
     const val CAMERA = "camera"
     const val NO_DEVICE = "no_device"
+    const val SETTINGS = "settings"
 }
 
 @Composable
@@ -26,11 +28,17 @@ fun NavGraph(
         composable(Routes.CAMERA) {
             CameraScreen(
                 onNoDevice = { navController.navigate(Routes.NO_DEVICE) { popUpTo(Routes.CAMERA) { inclusive = true } } },
+                onSettingsClick = { navController.navigate(Routes.SETTINGS) },
             )
         }
         composable(Routes.NO_DEVICE) {
             NoDeviceScreen(
                 onRetry = { navController.navigate(Routes.CAMERA) { popUpTo(Routes.NO_DEVICE) { inclusive = true } } },
+            )
+        }
+        composable(Routes.SETTINGS) {
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
             )
         }
     }

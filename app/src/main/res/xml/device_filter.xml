@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- UVC camera device filter: class=video (0x0E), subclass=video interface (0x01) -->
+<!-- UVC camera device filter -->
 <resources>
-    <usb-device class="239" subclass="2" />
+    <!-- Standard UVC devices (class at device level) -->
+    <usb-device class="14" subclass="3" protocol="0" />
+
+    <!-- IAD-based UVC devices (class 239 / subclass 2 at device level) -->
+    <usb-device class="239" subclass="2" protocol="1" />
+
+    <!-- Generic catch-all: any device with class 0 that might have UVC interfaces -->
+    <usb-device class="0" subclass="0" protocol="0" />
+
+    <!-- Specific known UVC camera VIDs/PIDs -->
+    <usb-device vendor-id="6408" product-id="8977" /> <!-- VID_1908 PID_2311 — USB2.0 PC CAMERA -->
 </resources>

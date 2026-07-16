@@ -46,8 +46,34 @@ class UsbReceiver : BroadcastReceiver() {
 
     /**
      * Check if a USB device is a UVC camera.
+     *
+     * UVC cameras can report their class at either the device level (class=0x0E)
+     * or at the interface level via an IAD (Interface Association Descriptor,
+     * class=239/bInterfaceClass=0x0E). We check both patterns.
      */
     private fun isUvcDevice(device: UsbDevice?): Boolean {
-        return device != null && device.classType == 0x0E && device.subclass == 0x01
+        if (device == null) return false
+
+        // Direct UVC device (class at device level)
+        if (device.deviceClass == 0x0E && device.deviceSubclass == 0x03) {
+            return true
+        }
+
+        // IAD-based UVC device (common for composite devices)
+        if (device.deviceClass == 239 && device.deviceSubclass == 2) {
+            return true
+        }
+
+        // Some cheap cameras report class=0 at device level — check interfaces
+        if (device.deviceClass == 0) {
+            for (i in 0 until device.interfaceCount) {
+                val iface = device.getInterface(i)
+                if (iface.getInterfaceClass() == 0x0E && iface.getInterfaceSubclass() == 0x03) {
+                    return true
+                }
+            }
+        }
+
+        return false
     }
 }

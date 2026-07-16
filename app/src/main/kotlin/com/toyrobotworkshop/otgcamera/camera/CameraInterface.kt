@@ -2,8 +2,6 @@ package com.toyrobotworkshop.otgcamera.camera
 
 import android.graphics.SurfaceTexture
 import android.view.Surface
-import androidx.annotation.OptIn
-import androidx.media3.common.util.UnstableApi
 import kotlin.math.roundToInt
 
 /**
@@ -31,9 +29,11 @@ interface CameraInterface {
     var controls: CameraControls
 
     /**
-     * Start preview rendering to the given [Surface].
+     * Start preview rendering to the given [SurfaceTexture].
+     * Using SurfaceTexture directly is more reliable than wrapping in a Surface,
+     * especially for UVC cameras where setPreviewTexture() is the preferred API.
      */
-    suspend fun startPreview(surface: Surface)
+    suspend fun startPreview(surfaceTexture: SurfaceTexture)
 
     /** Stop the preview. */
     suspend fun stopPreview()
@@ -46,9 +46,7 @@ interface CameraInterface {
     /**
      * Start video recording, encoding frames to [path].
      */
-    @OptIn(UnstableApi::class)
     suspend fun startRecording(path: String): Result<Unit>
-
     /**
      * Stop video recording and finalize the output file.
      */
@@ -124,31 +122,7 @@ data class CameraControls(
 
     /** Sharpness adjustment 0–255 (128 = normal). null = default. */
     val sharpness: Int? = null,
-) {
-    fun copy(
-        exposureTimeNs: Long? = this.exposureTimeNs,
-        gain: Float? = this.gain,
-        whiteBalanceMode: WhiteBalanceMode? = this.whiteBalanceMode,
-        colorTemperatureK: Int? = this.colorTemperatureK,
-        focusMode: FocusMode? = this.focusMode,
-        focusPosition: Int? = this.focusPosition,
-        brightness: Int? = this.brightness,
-        contrast: Int? = this.contrast,
-        saturation: Int? = this.saturation,
-        sharpness: Int? = this.sharpness,
-    ) = CameraControls(
-        exposureTimeNs = exposureTimeNs,
-        gain = gain,
-        whiteBalanceMode = whiteBalanceMode,
-        colorTemperatureK = colorTemperatureK,
-        focusMode = focusMode,
-        focusPosition = focusPosition,
-        brightness = brightness,
-        contrast = contrast,
-        saturation = saturation,
-        sharpness = sharpness,
-    )
-}
+)
 
 /** White balance modes. */
 enum class WhiteBalanceMode {

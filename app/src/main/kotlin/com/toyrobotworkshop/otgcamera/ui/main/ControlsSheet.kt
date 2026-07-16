@@ -145,7 +145,7 @@ fun ControlsSheet(
             // Apply button
             Button(
                 onClick = {
-                    cameraInterface?.controls = controls.copy(
+                    val newControls = CameraControls(
                         exposureTimeNs = if (exposureTime == 0L) null else exposureTime * 1000,
                         gain = if (gain == 1.0f) null else gain,
                         whiteBalanceMode = wbMode,
@@ -155,6 +155,7 @@ fun ControlsSheet(
                         saturation = if (saturation == 128) null else saturation,
                         sharpness = if (sharpness == 128) null else sharpness,
                     )
+                    cameraInterface?.controls = newControls
                     // TODO: trigger applyControls() coroutine
                     onDismiss()
                 },

@@ -1,9 +1,26 @@
+import java.time.Instant
+
+// Auto-incrementing build counter stored in a file
+fun getBuildCounter(): Int {
+    val counterFile = File(rootProject.projectDir, ".build_counter")
+    if (!counterFile.exists()) {
+        counterFile.writeText("0")
+    }
+    val count = counterFile.readText().toIntOrNull() ?: 0
+    counterFile.writeText("${count + 1}")
+    return count + 1
+}
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.kapt)
     alias(libs.plugins.hilt.android)
+    alias(libs.plugins.compose.compiler)
 }
+
+// Get build number ONCE - calling getBuildCounter() multiple times increments each time
+val buildNum = getBuildCounter()
 
 android {
     namespace = "com.toyrobotworkshop.otgcamera"
@@ -13,10 +30,15 @@ android {
         applicationId = "com.toyrobotworkshop.otgcamera"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = buildNum
+        versionName = "0.1.$buildNum"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Build-time diagnostics injected into BuildConfig
+        buildConfigField("String", "BUILD_TIME", "\"${Instant.now().toString()}\"")
+        buildConfigField("String", "GIT_SHA", "\"${providers.exec { commandLine("git", "rev-parse", "--short", "HEAD") }.standardOutput.asText.get().trim()}\"")
+        buildConfigField("int", "BUILD_NUMBER", "$buildNum")
     }
 
     buildTypes {
@@ -44,10 +66,7 @@ android {
 
     buildFeatures {
         compose = true
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.8"
+        buildConfig = true
     }
 
     packaging {
