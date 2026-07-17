@@ -37,10 +37,11 @@ The UI layer is completely unaware of which backend is active — both implement
 ## Tech Stack
 
 - **Language:** Kotlin
-- **UI:** Jetpack Compose + Material 3
+- **UI:** Jetpack Compose + Material 3 (dynamic color support)
 - **DI:** Hilt
 - **Camera:** Camera2 API (primary), UVCCamera library (fallback)
 - **Video:** MediaCodec (H.264) + MediaMuxer
+- **Icons:** Material Icons Extended (Rounded style)
 - **Target SDK:** 35 (Android 15)
 - **Min SDK:** 24 (Android 7.0)
 
@@ -53,6 +54,7 @@ The UI layer is completely unaware of which backend is active — both implement
 - Manual controls: exposure, gain/ISO, white balance, focus mode, brightness, contrast, saturation, sharpness
 - Real-time USB device detection
 - Background recording via foreground service
+- Settings screen with build info, device info, and runtime diagnostics
 
 ## Project Structure
 
@@ -66,12 +68,14 @@ app/src/main/kotlin/com/toyrobotworkshop/otgcamera/
 │   ├── camera2/             # Camera2 API backend
 │   └── uvc/                 # UVCCamera JNI backend
 ├── ui/                      # Compose UI
-│   ├── theme/               # Material 3 theme
-│   ├── main/                # Screens (Camera, Controls, NoDevice)
+│   ├── theme/               # Material 3 theme (dark/light/dynamic)
+│   ├── main/                # Screens (Camera, NoDevice)
+│   ├── settings/            # Settings + diagnostics screen
 │   └── navigation/          # Nav graph
 └── util/                    # Utilities
-    ├── FileSaver.kt         # MediaStore file output
+    ├── FileSaver.kt         # Cache-dir file output
     ├── UsbReceiver.kt       # USB plug/unplug detection
+    ├── DiagnosticLogger.kt  # Runtime event logging
     └── RecordingService.kt  # Background recording service
 ```
 
