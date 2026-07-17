@@ -13,6 +13,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import android.graphics.Color as AndroidColor
 
 private val DarkColorScheme = darkColorScheme(
     primary = Color(0xFF64B5F6),
@@ -60,6 +62,9 @@ fun OtgCameraTheme(
         SideEffect {
             val window = (view.context as Activity).window
             WindowCompat.setDecorFitsSystemWindows(window, false)
+            // Dark navigation bar with light icons
+            WindowInsetsControllerCompat(window, view).isAppearanceLightNavigationBars = true
+            window.navigationBarColor = AndroidColor.BLACK
         }
     }
 

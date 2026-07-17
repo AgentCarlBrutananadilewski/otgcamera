@@ -14,14 +14,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import com.toyrobotworkshop.otgcamera.R
 import com.toyrobotworkshop.otgcamera.BuildConfig
+import com.toyrobotworkshop.otgcamera.camera.FocusMode
+import com.toyrobotworkshop.otgcamera.camera.WhiteBalanceMode
 import com.toyrobotworkshop.otgcamera.util.DiagnosticLogger
 
 /**
- * Settings screen with build diagnostics and runtime event log.
+ * Settings screen with camera controls, build info, and runtime diagnostics.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,8 +50,7 @@ fun SettingsScreen(
         packageInfo?.versionCode?.toString() ?: "unknown"
     }
 
-    // Collect diagnostic events — DiagnosticLogger.events is a mutableStateListOf,
-    // so reading it directly triggers recomposition when new events arrive
+    // Collect diagnostic events
     val events = DiagnosticLogger.events
 
     // Build the full log text for copying
@@ -71,7 +74,7 @@ fun SettingsScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
-                            painter = androidx.compose.ui.res.painterResource(android.R.drawable.ic_menu_revert),
+                            painter = painterResource(R.drawable.ic_arrow_back),
                             contentDescription = "Back"
                         )
                     }
@@ -86,7 +89,63 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // Runtime diagnostics card — FIRST, most important
+            // 1. Camera Controls
+            item { CameraControlsSection() }
+
+            // 2. Build Information
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("Build Information", style = MaterialTheme.typography.titleMedium)
+                        HorizontalDivider()
+                        DiagnosticRow(label = "App Version", value = versionName)
+                        DiagnosticRow(label = "Build Number", value = versionCodeStr)
+                        DiagnosticRow(label = "BuildConfig Version", value = BuildConfig.VERSION_NAME)
+                        DiagnosticRow(label = "BuildConfig Code", value = BuildConfig.BUILD_NUMBER.toString())
+                        DiagnosticRow(label = "Build Time", value = BuildConfig.BUILD_TIME)
+                        DiagnosticRow(label = "Git SHA", value = BuildConfig.GIT_SHA)
+                    }
+                }
+            }
+
+            // 3. Device Information
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("Device Information", style = MaterialTheme.typography.titleMedium)
+                        HorizontalDivider()
+                        DiagnosticRow(label = "Device", value = "${Build.MANUFACTURER} ${Build.MODEL}")
+                        DiagnosticRow(label = "Android Version", value = Build.VERSION.RELEASE)
+                        DiagnosticRow(label = "SDK Int", value = Build.VERSION.SDK_INT.toString())
+                        DiagnosticRow(label = "Board", value = Build.BOARD)
+                        DiagnosticRow(label = "Brand", value = Build.BRAND)
+                    }
+                }
+            }
+
+            // 4. Package Information
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("Package Information", style = MaterialTheme.typography.titleMedium)
+                        HorizontalDivider()
+                        DiagnosticRow(label = "Package Name", value = packageName)
+                        DiagnosticRow(label = "First Install", value = packageInfo?.firstInstallTime?.let { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(it) } ?: "unknown")
+                        DiagnosticRow(label = "Last Updated", value = packageInfo?.lastUpdateTime?.let { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(it) } ?: "unknown")
+                    }
+                }
+            }
+
+            // 5. Runtime Diagnostics (moved to bottom)
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -106,10 +165,7 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(
-                                text = "Runtime Diagnostics",
-                                style = MaterialTheme.typography.titleMedium,
-                            )
+                            Text("Runtime Diagnostics", style = MaterialTheme.typography.titleMedium)
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 TextButton(onClick = { DiagnosticLogger.clear() }) {
                                     Text("Clear")
@@ -134,7 +190,6 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         } else {
-                            // Selectable, scrollable text block — user can long-press to select/copy
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -160,73 +215,106 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
+    }
+}
 
-            // Version info card
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(
-                            text = "Build Information",
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        HorizontalDivider()
-                        DiagnosticRow(label = "App Version", value = versionName)
-                        DiagnosticRow(label = "Build Number", value = versionCodeStr)
-                        DiagnosticRow(label = "BuildConfig Version", value = BuildConfig.VERSION_NAME)
-                        DiagnosticRow(label = "BuildConfig Code", value = BuildConfig.BUILD_NUMBER.toString())
-                        DiagnosticRow(label = "Build Time", value = BuildConfig.BUILD_TIME)
-                        DiagnosticRow(label = "Git SHA", value = BuildConfig.GIT_SHA)
-                    }
+@Composable
+private fun CameraControlsSection() {
+    var exposureTime by remember { mutableStateOf(0L) }
+    var gain by remember { mutableStateOf(1.0f) }
+    var wbMode by remember { mutableStateOf(WhiteBalanceMode.AUTO) }
+    var focusMode by remember { mutableStateOf(FocusMode.CONTINUOUS_PICTURE) }
+    var brightness by remember { mutableStateOf(0) }
+    var contrast by remember { mutableStateOf(0) }
+    var saturation by remember { mutableStateOf(128) }
+    var sharpness by remember { mutableStateOf(128) }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("Camera Controls", style = MaterialTheme.typography.titleMedium)
+            HorizontalDivider()
+
+            Text("Exposure Time (µs)")
+            Slider(
+                value = exposureTime.toFloat(),
+                onValueChange = { exposureTime = it.toLong() },
+                valueRange = 0f..10000f,
+            )
+
+            Text("Gain (ISO)")
+            Slider(
+                value = gain,
+                onValueChange = { gain = it },
+                valueRange = 1.0f..16.0f,
+            )
+
+            Text("White Balance")
+            Row(
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                WhiteBalanceMode.values().forEach { mode ->
+                    FilterChip(
+                        selected = wbMode == mode,
+                        onClick = { wbMode = mode },
+                        label = { Text(mode.name) },
+                    )
                 }
             }
 
-            // Device info card
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(
-                            text = "Device Information",
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        HorizontalDivider()
-                        DiagnosticRow(label = "Device", value = "${Build.MANUFACTURER} ${Build.MODEL}")
-                        DiagnosticRow(label = "Android Version", value = Build.VERSION.RELEASE)
-                        DiagnosticRow(label = "SDK Int", value = Build.VERSION.SDK_INT.toString())
-                        DiagnosticRow(label = "Board", value = Build.BOARD)
-                        DiagnosticRow(label = "Brand", value = Build.BRAND)
-                    }
+            Text("Focus Mode")
+            Row(
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                FocusMode.values().forEach { mode ->
+                    FilterChip(
+                        selected = focusMode == mode,
+                        onClick = { focusMode = mode },
+                        label = { Text(mode.name) },
+                    )
                 }
             }
 
-            // Package info card
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(
-                            text = "Package Information",
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        HorizontalDivider()
-                        DiagnosticRow(label = "Package Name", value = packageName)
-                        DiagnosticRow(label = "First Install", value = packageInfo?.firstInstallTime?.let { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(it) } ?: "unknown")
-                        DiagnosticRow(label = "Last Updated", value = packageInfo?.lastUpdateTime?.let { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(it) } ?: "unknown")
-                    }
-                }
+            Text("Brightness")
+            Slider(
+                value = brightness.toFloat(),
+                onValueChange = { brightness = it.toInt() },
+                valueRange = -128f..127f,
+            )
+
+            Text("Contrast")
+            Slider(
+                value = contrast.toFloat(),
+                onValueChange = { contrast = it.toInt() },
+                valueRange = -128f..127f,
+            )
+
+            Text("Saturation")
+            Slider(
+                value = saturation.toFloat(),
+                onValueChange = { saturation = it.toInt() },
+                valueRange = 0f..255f,
+            )
+
+            Text("Sharpness")
+            Slider(
+                value = sharpness.toFloat(),
+                onValueChange = { sharpness = it.toInt() },
+                valueRange = 0f..255f,
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = { /* TODO: apply controls to camera */ },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Apply")
             }
         }
     }

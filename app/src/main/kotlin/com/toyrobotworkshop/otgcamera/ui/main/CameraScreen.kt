@@ -1,20 +1,22 @@
 package com.toyrobotworkshop.otgcamera.ui.main
 
-import android.Manifest
-import android.content.pm.PackageManager
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
+import com.toyrobotworkshop.otgcamera.R
 import com.toyrobotworkshop.otgcamera.util.FileSaver
 
 /**
- * Main camera screen — preview, capture button, and controls toggle.
+ * Main camera screen — preview and bottom action bar.
  *
  * Receives a shared [viewModel] from NavGraph so ViewModel state (and the USB
  * reconnect broadcast receiver) survives navigation to/from NoDeviceScreen.
@@ -28,8 +30,6 @@ fun CameraScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
 
-    var showControls by remember { mutableStateOf(false) }
-
     // Auto-detect camera on launch
     LaunchedEffect(Unit) {
         viewModel.detectAndInitialize(context)
@@ -38,27 +38,8 @@ fun CameraScreen(
     val statusMessage = uiState.message?.takeIf { it.isNotEmpty() }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("OTG Camera") },
-                actions = {
-                    IconButton(onClick = onSettingsClick) {
-                        Icon(
-                            painter = painterResource(android.R.drawable.ic_menu_preferences),
-                            contentDescription = "Settings",
-                        )
-                    }
-                },
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showControls = !showControls },
-                containerColor = MaterialTheme.colorScheme.primary,
-            ) {
-                Text(if (showControls) "✕" else "⚙")
-            }
-        },
+        containerColor = Color.Black,
+        contentWindowInsets = WindowInsets(0),
     ) { padding ->
         Box(
             modifier = Modifier
@@ -71,8 +52,6 @@ fun CameraScreen(
             if (isCameraReady) {
                 PreviewView(
                     modifier = Modifier.fillMaxSize(),
-                    // Pass the known camera resolution so PreviewView can letterbox/pillarbox
-                    // the preview instead of stretching it to fill the view.
                     cameraResolution = uiState.resolution,
                     onSurfaceReady = { surfaceTexture ->
                         viewModel.setPreviewSurface(surfaceTexture)
@@ -129,10 +108,10 @@ fun CameraScreen(
                 }
             }
 
-            // Bottom controls bar
-            if (uiState.status == CameraStatus.Ready || uiState.status == CameraStatus.Previewing) {
-                CameraControlsBar(
-                    isRecording = false, // TODO: track recording state
+            // Bottom action bar — 4 round icon buttons
+            if (isCameraReady) {
+                BottomActionBar(
+                    onGalleryClick = { /* TODO: show gallery */ },
                     onCapturePhoto = {
                         val path = FileSaver.getPhotoPath(context.cacheDir)
                         viewModel.capturePhoto(path)
@@ -141,69 +120,87 @@ fun CameraScreen(
                         val path = FileSaver.getVideoPath(context.cacheDir)
                         viewModel.startRecording(path)
                     },
-                    onStopRecording = {
-                        viewModel.stopRecording()
-                    },
+                    onStopRecording = viewModel::stopRecording,
+                    onSettingsClick = onSettingsClick,
+                    isRecording = false, // TODO: track recording state
                     modifier = Modifier.align(Alignment.BottomCenter),
-                )
-            }
-
-            // Controls bottom sheet
-            if (showControls) {
-                ControlsSheet(
-                    cameraInterface = null, // TODO: expose from ViewModel
-                    onDismiss = { showControls = false },
                 )
             }
         }
     }
 }
 
+private val buttonSize = 64.dp
+private val buttonColor = Color(0xFF424242)
+
 @Composable
-private fun CameraControlsBar(
-    isRecording: Boolean,
+private fun BottomActionBar(
+    onGalleryClick: () -> Unit,
     onCapturePhoto: () -> Unit,
     onStartRecording: () -> Unit,
     onStopRecording: () -> Unit,
+    onSettingsClick: () -> Unit,
+    isRecording: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val navBarHeight = with(LocalDensity.current) { WindowInsets.navigationBars.getBottom(this).toDp() }
+
     Row(
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .padding(32.dp),
+            .padding(horizontal = 8.dp, vertical = 16.dp)
+            .padding(bottom = navBarHeight),
+        horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
-        IconButton(onClick = { /* TODO: show gallery */ }) {
-            Icon(
-                painter = painterResource(android.R.drawable.ic_menu_gallery),
-                contentDescription = "Gallery",
-                tint = MaterialTheme.colorScheme.onSurface,
-            )
-        }
+        BottomAction(
+            icon = { Icon(painterResource(R.drawable.ic_photo_library), "Gallery", tint = Color.White) },
+            onClick = onGalleryClick,
+        )
+        BottomAction(
+            icon = { Icon(painterResource(R.drawable.ic_camera), "Capture Photo", tint = Color.White) },
+            onClick = onCapturePhoto,
+        )
+        BottomAction(
+            icon = {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .background(MaterialTheme.colorScheme.error, shape = CircleShape),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_fiber_manual_record),
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            },
+            onClick = if (isRecording) onStopRecording else onStartRecording,
+        )
+        BottomAction(
+            icon = { Icon(painterResource(R.drawable.ic_settings), "Settings", tint = Color.White) },
+            onClick = onSettingsClick,
+        )
+    }
+}
 
-        if (isRecording) {
-            ExtendedFloatingActionButton(
-                onClick = onStopRecording,
-                containerColor = MaterialTheme.colorScheme.error,
-            ) {
-                Text("Stop", color = MaterialTheme.colorScheme.onError)
-            }
-        } else {
-            ExtendedFloatingActionButton(
-                onClick = onCapturePhoto,
-                containerColor = MaterialTheme.colorScheme.surface,
-            ) {
-                Text("📷", color = MaterialTheme.colorScheme.onSurface)
-            }
-        }
-
-        IconButton(onClick = { /* TODO: toggle video mode */ }) {
-            Icon(
-                painter = painterResource(android.R.drawable.ic_menu_camera),
-                contentDescription = "Video mode",
-                tint = MaterialTheme.colorScheme.onSurface,
-            )
+@Composable
+private fun BottomAction(
+    icon: @Composable () -> Unit,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = buttonColor,
+        modifier = Modifier.size(buttonSize),
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            icon()
         }
     }
 }
