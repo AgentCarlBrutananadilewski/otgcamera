@@ -143,8 +143,13 @@ class Camera2Backend @Inject constructor(
                     cameraDevice = device
                     _state = CameraInterface.State.Previewing
 
-                    // Now create the capture session with the pending surface
-                    val surface = pendingSurface ?: previewSurface
+                    // Merge pending surface into previewSurface so startPreviewRepeating has a valid target
+                    if (pendingSurface != null && previewSurface == null) {
+                        previewSurface = pendingSurface
+                    }
+                    pendingSurface = null
+
+                    val surface = previewSurface
                         ?: throw IllegalStateException("No preview surface available")
                     createCaptureSession(surface)
                 }

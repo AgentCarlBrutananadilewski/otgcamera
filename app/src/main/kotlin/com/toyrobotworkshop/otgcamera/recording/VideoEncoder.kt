@@ -235,6 +235,6 @@ class VideoEncoder(
     }
 
     companion object {
-        private const val TIMEOUT_US = 10_000L // 10 seconds
+        private const val TIMEOUT_US = 10_000L // 10 ms (value is in microseconds)
     }
 }
