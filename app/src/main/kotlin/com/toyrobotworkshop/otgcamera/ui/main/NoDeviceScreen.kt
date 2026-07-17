@@ -1,11 +1,12 @@
 package com.toyrobotworkshop.otgcamera.ui.main
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.VideocamOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
@@ -24,9 +25,9 @@ fun NoDeviceScreen(
             .padding(32.dp),
     ) {
         Icon(
-            painter = painterResource(android.R.drawable.ic_menu_camera),
-            contentDescription = "No camera",
-            modifier = Modifier.size(96.dp),
+            imageVector = Icons.Rounded.VideocamOff,
+            contentDescription = null,
+            modifier = Modifier.size(48.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 

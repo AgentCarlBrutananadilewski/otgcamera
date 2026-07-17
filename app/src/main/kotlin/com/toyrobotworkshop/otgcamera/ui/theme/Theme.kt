@@ -3,6 +3,7 @@ package com.toyrobotworkshop.otgcamera.ui.theme
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -62,14 +63,19 @@ fun OtgCameraTheme(
         SideEffect {
             val window = (view.context as Activity).window
             WindowCompat.setDecorFitsSystemWindows(window, false)
-            // Dark navigation bar with light icons
-            WindowInsetsControllerCompat(window, view).isAppearanceLightNavigationBars = true
-            window.navigationBarColor = AndroidColor.BLACK
+            // Transparent nav bar — content draws behind it
+            window.navigationBarColor = AndroidColor.TRANSPARENT
+            // Match icon colour to the current theme
+            WindowInsetsControllerCompat(window, view).apply {
+                isAppearanceLightStatusBars = !darkTheme
+                isAppearanceLightNavigationBars = !darkTheme
+            }
         }
     }
 
     MaterialTheme(
         colorScheme = colorScheme,
+        typography = Typography(),
         content = content,
     )
 }

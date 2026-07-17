@@ -3,6 +3,11 @@ package com.toyrobotworkshop.otgcamera.ui.main
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CameraAlt
+import androidx.compose.material.icons.rounded.FiberManualRecord
+import androidx.compose.material.icons.rounded.PhotoLibrary
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -10,9 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import com.toyrobotworkshop.otgcamera.R
 import com.toyrobotworkshop.otgcamera.util.FileSaver
 
 /**
@@ -131,7 +134,6 @@ fun CameraScreen(
 }
 
 private val buttonSize = 64.dp
-private val buttonColor = Color(0xFF424242)
 
 @Composable
 private fun BottomActionBar(
@@ -144,6 +146,8 @@ private fun BottomActionBar(
     modifier: Modifier = Modifier,
 ) {
     val navBarHeight = with(LocalDensity.current) { WindowInsets.navigationBars.getBottom(this).toDp() }
+    // M3 surface token with alpha for a scrim-like overlay on the camera preview
+    val buttonColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.75f)
 
     Row(
         modifier = modifier
@@ -153,12 +157,14 @@ private fun BottomActionBar(
         horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
         BottomAction(
-            icon = { Icon(painterResource(R.drawable.ic_photo_library), "Gallery", tint = Color.White) },
+            icon = { Icon(Icons.Rounded.PhotoLibrary, "Gallery", tint = Color.White) },
             onClick = onGalleryClick,
+            buttonColor = buttonColor,
         )
         BottomAction(
-            icon = { Icon(painterResource(R.drawable.ic_camera), "Capture Photo", tint = Color.White) },
+            icon = { Icon(Icons.Rounded.CameraAlt, "Capture Photo", tint = Color.White) },
             onClick = onCapturePhoto,
+            buttonColor = buttonColor,
         )
         BottomAction(
             icon = {
@@ -169,7 +175,7 @@ private fun BottomActionBar(
                         .background(MaterialTheme.colorScheme.error, shape = CircleShape),
                 ) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_fiber_manual_record),
+                        imageVector = Icons.Rounded.FiberManualRecord,
                         contentDescription = null,
                         tint = Color.White,
                         modifier = Modifier.size(16.dp),
@@ -177,10 +183,12 @@ private fun BottomActionBar(
                 }
             },
             onClick = if (isRecording) onStopRecording else onStartRecording,
+            buttonColor = buttonColor,
         )
         BottomAction(
-            icon = { Icon(painterResource(R.drawable.ic_settings), "Settings", tint = Color.White) },
+            icon = { Icon(Icons.Rounded.Settings, "Settings", tint = Color.White) },
             onClick = onSettingsClick,
+            buttonColor = buttonColor,
         )
     }
 }
@@ -189,6 +197,7 @@ private fun BottomActionBar(
 private fun BottomAction(
     icon: @Composable () -> Unit,
     onClick: () -> Unit,
+    buttonColor: Color,
 ) {
     Surface(
         onClick = onClick,

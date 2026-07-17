@@ -89,6 +89,13 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.activity.compose)
 
+    // Material Icons (core + extended for Material Symbols)
+    implementation(libs.androidx.material.icons.core)
+    implementation(libs.androidx.material.icons.extended)
+
+    // Material Components (for XML themes)
+    implementation(libs.google.material)
+
     // Navigation
     implementation(libs.androidx.navigation.compose)
 
