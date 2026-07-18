@@ -1,4 +1,4 @@
-# OTG Camera
+# Auspex
 
 A modern, open-source USB OTG camera app for Android. No ads, no tracking, no sketchy permissions.
 
@@ -59,24 +59,24 @@ The UI layer is completely unaware of which backend is active — both implement
 ## Project Structure
 
 ```
-app/src/main/kotlin/com/toyrobotworkshop/otgcamera/
-├── OtgCameraApp.kt          # Application + Hilt
-├── di/                      # Dependency injection modules
-├── camera/                  # Camera abstraction layer
-│   ├── CameraInterface.kt   # Unified interface
-│   ├── CameraManager.kt     # Backend detection/factory
-│   ├── camera2/             # Camera2 API backend
-│   └── uvc/                 # UVCCamera JNI backend
-├── ui/                      # Compose UI
-│   ├── theme/               # Material 3 theme (dark/light/dynamic)
-│   ├── main/                # Screens (Camera, NoDevice)
-│   ├── settings/            # Settings + diagnostics screen
-│   └── navigation/          # Nav graph
-└── util/                    # Utilities
-    ├── FileSaver.kt         # Cache-dir file output
-    ├── UsbReceiver.kt       # USB plug/unplug detection
-    ├── DiagnosticLogger.kt  # Runtime event logging
-    └── RecordingService.kt  # Background recording service
+app/src/main/kotlin/com/toyrobotworkshop/auspex/
+├── AuspexApp.kt              # Application + Hilt
+├── di/                       # Dependency injection modules
+├── camera/                   # Camera abstraction layer
+│   ├── CameraInterface.kt    # Unified interface
+│   ├── CameraManager.kt      # Backend detection/factory
+│   ├── camera2/              # Camera2 API backend
+│   └── uvc/                  # UVCCamera JNI backend
+├── ui/                       # Compose UI
+│   ├── theme/                # Material 3 theme (dark/light/dynamic)
+│   ├── main/                 # Screens (Camera, NoDevice)
+│   ├── settings/             # Settings + diagnostics screen
+│   └── navigation/           # Nav graph
+└── util/                     # Utilities
+    ├── FileSaver.kt          # Cache-dir file output
+    ├── UsbReceiver.kt        # USB plug/unplug detection
+    ├── DiagnosticLogger.kt   # Runtime event logging
+    └── RecordingService.kt   # Background recording service
 ```
 
 ## License

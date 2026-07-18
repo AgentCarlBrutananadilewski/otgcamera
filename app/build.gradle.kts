@@ -23,11 +23,11 @@ plugins {
 val buildNum = getBuildCounter()
 
 android {
-    namespace = "com.toyrobotworkshop.otgcamera"
+    namespace = "com.toyrobotworkshop.auspex"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.toyrobotworkshop.otgcamera"
+        applicationId = "com.toyrobotworkshop.auspex"
         minSdk = 24
         targetSdk = 35
         versionCode = buildNum
@@ -52,6 +52,15 @@ android {
         }
         debug {
             isMinifyEnabled = false
+            applicationIdSuffix = ".debug"
+        }
+    }
+
+    android.applicationVariants.all {
+        outputs.forEach { output ->
+            val variantName = name.replace("Debug", "debug").replace("Release", "release")
+            (output as? com.android.build.gradle.internal.api.BaseVariantOutputImpl)?.outputFileName =
+                "auspex-${variantName}.apk"
         }
     }
 

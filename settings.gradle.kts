@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "OtgCamera"
+rootProject.name = "Auspex"
 include(":app")
