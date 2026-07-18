@@ -54,9 +54,15 @@ class Camera2Backend @Inject constructor(
     // Pending preview surface (set before camera is opened)
     private var pendingSurface: Surface? = null
 
-    private var _state: CameraInterface.State = CameraInterface.State.Idle
+    private val _stateFlow = kotlinx.coroutines.flow.MutableStateFlow<CameraInterface.State>(CameraInterface.State.Idle)
+    override val stateFlow: kotlinx.coroutines.flow.StateFlow<CameraInterface.State> = _stateFlow
+
+    private var stateValue: CameraInterface.State
+        get() = _stateFlow.value
+        set(value) { _stateFlow.value = value }
+
     override val state: CameraInterface.State
-        get() = _state
+        get() = _stateFlow.value
 
     override var resolution: Size = Size(640, 480)
         set(value) {
@@ -78,7 +84,7 @@ class Camera2Backend @Inject constructor(
      */
     suspend fun initialize(cameraId: String) {
         this.cameraId = cameraId
-        _state = CameraInterface.State.Initializing
+        stateValue = CameraInterface.State.Initializing
 
         handlerThread = HandlerThread("Camera2").also { it.start() }
         backgroundHandler = Handler(handlerThread!!.looper)
@@ -100,7 +106,7 @@ class Camera2Backend @Inject constructor(
         }
 
         Log.d(tag, "Initialized camera $cameraId with ${_supportedResolutions.size} resolutions")
-        _state = CameraInterface.State.Ready(CameraInterface.BackendType.CAMERA2)
+        stateValue = CameraInterface.State.Ready(CameraInterface.BackendType.CAMERA2)
     }
 
     @SuppressLint("MissingPermission")
@@ -141,7 +147,7 @@ class Camera2Backend @Inject constructor(
                 override fun onOpened(device: CameraDevice) {
                     Log.d(tag, "Camera $cameraId opened")
                     cameraDevice = device
-                    _state = CameraInterface.State.Previewing
+                    stateValue = CameraInterface.State.Previewing
 
                     // Merge pending surface into previewSurface so startPreviewRepeating has a valid target
                     if (pendingSurface != null && previewSurface == null) {
@@ -159,7 +165,7 @@ class Camera2Backend @Inject constructor(
                     cameraDevice = null
                     captureSession?.close()
                     captureSession = null
-                    _state = CameraInterface.State.Idle
+                    stateValue = CameraInterface.State.Idle
                 }
 
                 override fun onError(device: CameraDevice, error: Int) {
@@ -167,7 +173,7 @@ class Camera2Backend @Inject constructor(
                     cameraDevice = null
                     captureSession?.close()
                     captureSession = null
-                    _state = CameraInterface.State.Error("Camera error: $error")
+                    stateValue = CameraInterface.State.Error("Camera error: $error")
                 }
             },
             backgroundHandler
@@ -190,7 +196,7 @@ class Camera2Backend @Inject constructor(
 
                 override fun onConfigureFailed(session: CameraCaptureSession) {
                     Log.e(tag, "Session configuration failed")
-                    _state = CameraInterface.State.Error("Failed to configure camera session")
+                    stateValue = CameraInterface.State.Error("Failed to configure camera session")
                 }
             },
             backgroundHandler
@@ -212,7 +218,7 @@ class Camera2Backend @Inject constructor(
             Log.d(tag, "Preview repeating started")
         } catch (e: Exception) {
             Log.e(tag, "Failed to start preview", e)
-            _state = CameraInterface.State.Error("Failed to start preview: ${e.message}")
+            stateValue = CameraInterface.State.Error("Failed to start preview: ${e.message}")
         }
     }
 
@@ -225,7 +231,7 @@ class Camera2Backend @Inject constructor(
         imageReader = null
         previewSurface = null
         pendingSurface = null
-        _state = CameraInterface.State.Ready(CameraInterface.BackendType.CAMERA2)
+        stateValue = CameraInterface.State.Ready(CameraInterface.BackendType.CAMERA2)
     }
 
     override suspend fun capturePhoto(path: String): Result<Unit> = runCatching {
@@ -239,19 +245,19 @@ class Camera2Backend @Inject constructor(
 
     override suspend fun startRecording(path: String): Result<Unit> = runCatching {
         Log.d(tag, "Starting recording to $path")
-        _state = CameraInterface.State.Recording
+        stateValue = CameraInterface.State.Recording
 
         // TODO: Create MediaCodec encoder surface and rebuild capture session
         // with the encoder surface as target. Use YUV_420_888 format for preview
         // + encoder surface for recording.
 
-        _state = CameraInterface.State.Previewing
+        stateValue = CameraInterface.State.Previewing
     }
 
     override suspend fun stopRecording(): Result<Unit> = runCatching {
         Log.d(tag, "Stopping recording")
         // TODO: Stop MediaCodec encoder and finalize MP4 file
-        _state = CameraInterface.State.Previewing
+        stateValue = CameraInterface.State.Previewing
     }
 
     override suspend fun applyControls() {
@@ -318,6 +324,6 @@ class Camera2Backend @Inject constructor(
         backgroundHandler = null
         previewSurface = null
         pendingSurface = null
-        _state = CameraInterface.State.Idle
+        stateValue = CameraInterface.State.Idle
     }
 }

@@ -61,9 +61,15 @@ class UVCBackend @Inject constructor(
     private var activeFrameFormat: Int = com.serenegiant.usb.UVCCamera.FRAME_FORMAT_YUYV
 
     // State
-    private var _state: CameraInterface.State = CameraInterface.State.Idle
+    private val _stateFlow = kotlinx.coroutines.flow.MutableStateFlow<CameraInterface.State>(CameraInterface.State.Idle)
+    override val stateFlow: kotlinx.coroutines.flow.StateFlow<CameraInterface.State> = _stateFlow
+
+    private var stateValue: CameraInterface.State
+        get() = _stateFlow.value
+        set(value) { _stateFlow.value = value }
+
     override val state: CameraInterface.State
-        get() = _state
+        get() = _stateFlow.value
 
     override var resolution: Size = Size(640, 480)
         set(value) {
@@ -102,7 +108,7 @@ class UVCBackend @Inject constructor(
         DiagnosticLogger.init("initialize() called for device ${device.deviceName}")
         DiagnosticLogger.perm("Activity context provided: ${activityContext != null}")
         connectedDevice = device
-        _state = CameraInterface.State.Initializing
+        stateValue = CameraInterface.State.Initializing
 
         Log.d(tag, "Initializing UVC backend for ${device.deviceName}, activityContext=${activityContext != null}")
 
@@ -137,7 +143,7 @@ class UVCBackend @Inject constructor(
                 uvccamera = null
                 this@UVCBackend.ctrlBlock = null
                 connectedDevice = null
-                _state = CameraInterface.State.Idle
+                stateValue = CameraInterface.State.Idle
             }
 
             override fun onCancel(device: UsbDevice) {
@@ -146,7 +152,7 @@ class UVCBackend @Inject constructor(
                 if (device == connectedDevice && !usbPermissionRequested) {
                     Log.d(tag, "UVC onCancel from USBMonitor (permission not yet requested by us): ${device.deviceName}")
                     DiagnosticLogger.perm("USBMonitor.onCancel fired — we haven't requested permission yet, treating as error")
-                    _state = CameraInterface.State.Error("USB permission denied for camera")
+                    stateValue = CameraInterface.State.Error("USB permission denied for camera")
                 } else {
                     Log.d(tag, "UVC onCancel (ignored — we handle permission ourselves): ${device.deviceName}")
                     DiagnosticLogger.perm("USBMonitor.onCancel fired — ignored (usbPermissionRequested=$usbPermissionRequested)")
@@ -171,7 +177,7 @@ class UVCBackend @Inject constructor(
                 usbMonitor?.register() // register AFTER so detach watcher works but no race
                 openCamera(cb)
             } else {
-                _state = CameraInterface.State.Error("Failed to open USB device")
+                stateValue = CameraInterface.State.Error("Failed to open USB device")
             }
         } else {
             // Request permission FIRST — before registering USBMonitor.
@@ -227,7 +233,7 @@ class UVCBackend @Inject constructor(
         } catch (e: Exception) {
             Log.e(tag, "Failed to create PendingIntent", e)
             DiagnosticLogger.error("PendingIntent creation failed: ${e.message}")
-            _state = CameraInterface.State.Error("Failed to create permission intent: ${e.message}")
+            stateValue = CameraInterface.State.Error("Failed to create permission intent: ${e.message}")
             return
         }
 
@@ -261,12 +267,12 @@ class UVCBackend @Inject constructor(
                             openCamera(cb)
                         } else {
                             DiagnosticLogger.error("openDevice returned null after permission granted")
-                            _state = CameraInterface.State.Error("Failed to open USB device after permission granted")
+                            stateValue = CameraInterface.State.Error("Failed to open USB device after permission granted")
                         }
                     } else {
                         // Permission denied
                         DiagnosticLogger.perm("DENIED — user rejected or wrong device (dev=$dev, connected=$connectedDevice)")
-                        _state = CameraInterface.State.Error("USB permission denied for camera")
+                        stateValue = CameraInterface.State.Error("USB permission denied for camera")
                     }
                 }
             }
@@ -285,7 +291,7 @@ class UVCBackend @Inject constructor(
         } catch (e: Exception) {
             Log.e(tag, "Failed to register BroadcastReceiver", e)
             DiagnosticLogger.error("BroadcastReceiver registration failed: ${e.message}")
-            _state = CameraInterface.State.Error("Failed to register permission receiver: ${e.message}")
+            stateValue = CameraInterface.State.Error("Failed to register permission receiver: ${e.message}")
             return
         }
 
@@ -300,7 +306,7 @@ class UVCBackend @Inject constructor(
         } catch (e: Exception) {
             Log.e(tag, "Failed to request USB permission", e)
             DiagnosticLogger.error("requestPermission() threw: ${e.message}")
-            _state = CameraInterface.State.Error("Failed to request USB permission: ${e.message}")
+            stateValue = CameraInterface.State.Error("Failed to request USB permission: ${e.message}")
             // Clean up receiver
             try {
                 context.unregisterReceiver(permissionReceiver)
@@ -398,12 +404,12 @@ class UVCBackend @Inject constructor(
                 }
             } catch (e: Exception) {
                 Log.e(tag, "Failed to open UVC camera", e)
-                _state = CameraInterface.State.Error("Failed to open UVC camera: ${e.message}")
+                stateValue = CameraInterface.State.Error("Failed to open UVC camera: ${e.message}")
                 DiagnosticLogger.error("openCamera failed: ${e.javaClass.simpleName}: ${e.message}")
                 return@post
             }
 
-            _state = CameraInterface.State.Ready(CameraInterface.BackendType.UVCCAMERA)
+            stateValue = CameraInterface.State.Ready(CameraInterface.BackendType.UVCCAMERA)
             Log.d(tag, "UVC backend ready")
         }
     }
@@ -446,12 +452,12 @@ class UVCBackend @Inject constructor(
                 camera.startPreview()
                 DiagnosticLogger.camera("Step 3 OK — startPreview succeeded")
 
-                _state = CameraInterface.State.Previewing
+                stateValue = CameraInterface.State.Previewing
                 Log.d(tag, "UVC preview started at ${resolution.width}x${resolution.height}")
             } catch (e: Exception) {
                 error = e
                 Log.e(tag, "Failed to start UVC preview", e)
-                _state = CameraInterface.State.Error("Failed to start preview: ${e.message}")
+                stateValue = CameraInterface.State.Error("Failed to start preview: ${e.message}")
                 DiagnosticLogger.error("startPreview failed: ${e.javaClass.simpleName}: ${e.message}")
             } finally {
                 latch.countDown()
@@ -468,8 +474,8 @@ class UVCBackend @Inject constructor(
 
     override suspend fun stopPreview() {
         uvccamera?.stopPreview()
-        if (_state is CameraInterface.State.Previewing || _state is CameraInterface.State.Recording) {
-            _state = CameraInterface.State.Ready(CameraInterface.BackendType.UVCCAMERA)
+        if (state is CameraInterface.State.Previewing || state is CameraInterface.State.Recording) {
+            stateValue = CameraInterface.State.Ready(CameraInterface.BackendType.UVCCAMERA)
         }
     }
 
@@ -480,13 +486,13 @@ class UVCBackend @Inject constructor(
 
     override suspend fun startRecording(path: String): Result<Unit> = runCatching {
         Log.d(tag, "Starting recording to $path")
-        _state = CameraInterface.State.Recording
+        stateValue = CameraInterface.State.Recording
         // TODO: Create MediaCodec H.264 encoder and pipe YUV frames from IFrameCallback
     }
 
     override suspend fun stopRecording(): Result<Unit> = runCatching {
         Log.d(tag, "Stopping recording")
-        _state = CameraInterface.State.Previewing
+        stateValue = CameraInterface.State.Previewing
         // TODO: Stop MediaCodec encoder, release MediaMuxer, finalize MP4 file
     }
 
@@ -592,7 +598,7 @@ class UVCBackend @Inject constructor(
         }
         usbMonitor = null
         connectedDevice = null
-        _state = CameraInterface.State.Idle
+        stateValue = CameraInterface.State.Idle
         Log.d(tag, "UVC backend released")
     }
 }

@@ -15,7 +15,6 @@ import com.toyrobotworkshop.auspex.camera.CameraInterface
 import com.toyrobotworkshop.auspex.camera.CameraManager
 import com.toyrobotworkshop.auspex.util.UsbReceiver
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -168,7 +167,7 @@ class CameraViewModel @Inject constructor(
     }
 
     /**
-     * Initialize UVC backend asynchronously, polling for the backend to become ready.
+     * Initialize UVC backend asynchronously, collecting state changes via [CameraInterface.stateFlow].
      * The backend handles the USB permission dialog itself; we just wait for it.
      */
     private suspend fun initializeUVC(device: UsbDevice, activityContext: Context) {
@@ -180,48 +179,60 @@ class CameraViewModel @Inject constructor(
 
             camera = cameraManager.initializeUVC(device, activityContext)
 
-            var attempts = 0
-            val maxAttempts = 30 // 3 seconds
-            while (attempts < maxAttempts) {
-                delay(100)
-                attempts++
-
-                when (val state = camera?.state) {
-                    is CameraInterface.State.Ready -> {
-                        val cam = camera!!
-                        _uiState.value = _uiState.value.copy(
-                            status = CameraStatus.Ready,
-                            backendType = CameraInterface.BackendType.UVCCAMERA,
-                            // Expose the actual resolution so PreviewView can constrain its aspect ratio
-                            resolution = cam.resolution,
-                            message = "UVC camera ready"
-                        )
-                        Log.d(tag, "UVC backend ready after $attempts attempts, resolution=${cam.resolution}")
-                        return
-                    }
-
-                    is CameraInterface.State.Error -> {
-                        _uiState.value = _uiState.value.copy(
-                            status = CameraStatus.Error(state.message),
-                            message = state.message
-                        )
-                        return
-                    }
-
-                    else -> {
-                        if (attempts % 10 == 0) {
+            // Collect state changes via flow instead of polling
+            val cam = camera ?: return
+            kotlinx.coroutines.launch {
+                cam.stateFlow.collect { state ->
+                    when (state) {
+                        is CameraInterface.State.Ready -> {
                             _uiState.value = _uiState.value.copy(
-                                message = "Waiting for USB permission..."
+                                status = CameraStatus.Ready,
+                                backendType = CameraInterface.BackendType.UVCCAMERA,
+                                // Expose the actual resolution so PreviewView can constrain its aspect ratio
+                                resolution = cam.resolution,
+                                message = "UVC camera ready"
                             )
+                            Log.d(tag, "UVC backend ready, resolution=${cam.resolution}")
+                        }
+
+                        is CameraInterface.State.Error -> {
+                            _uiState.value = _uiState.value.copy(
+                                status = CameraStatus.Error(state.message),
+                                message = state.message
+                            )
+                        }
+
+                        else -> {
+                            // Still initializing — update message periodically
+                            if (state == CameraInterface.State.Initializing) {
+                                _uiState.value = _uiState.value.copy(
+                                    message = "Waiting for USB permission..."
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            _uiState.value = _uiState.value.copy(
-                status = CameraStatus.Error("Timeout waiting for USB camera"),
-                message = "Permission dialog may have been dismissed"
-            )
+            // Wait for a terminal state (Ready or Error) with timeout
+            val job = kotlinx.coroutines.launch {
+                cam.stateFlow.collect { state ->
+                    if (state is CameraInterface.State.Ready || state is CameraInterface.State.Error) {
+                        return@collect
+                    }
+                }
+            }
+            kotlinx.coroutines.withTimeoutOrNull(10_000) {
+                job.join()
+            }
+
+            // If we timed out and still haven't reached a terminal state
+            if (cam.state is CameraInterface.State.Initializing) {
+                _uiState.value = _uiState.value.copy(
+                    status = CameraStatus.Error("Timeout waiting for USB camera"),
+                    message = "Permission dialog may have been dismissed"
+                )
+            }
         } catch (e: Exception) {
             Log.e(tag, "Failed to initialize UVC backend", e)
             _uiState.value = _uiState.value.copy(
@@ -309,12 +320,12 @@ data class CameraUiState(
 )
 
 sealed interface CameraStatus {
-    object Idle : CameraStatus
-    object Detecting : CameraStatus
-    object Initializing : CameraStatus
-    object Ready : CameraStatus
-    object Starting : CameraStatus
-    object Previewing : CameraStatus
-    object NoCamera : CameraStatus
+    data object Idle : CameraStatus
+    data object Detecting : CameraStatus
+    data object Initializing : CameraStatus
+    data object Ready : CameraStatus
+    data object Starting : CameraStatus
+    data object Previewing : CameraStatus
+    data object NoCamera : CameraStatus
     data class Error(val message: String) : CameraStatus
 }

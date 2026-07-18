@@ -13,6 +13,9 @@ interface CameraInterface {
     /** Current state of the camera. */
     val state: State
 
+    /** Flow of camera state changes — use instead of polling [state]. */
+    val stateFlow: kotlinx.coroutines.flow.StateFlow<State>
+
     /** Currently selected resolution. */
     var resolution: Size
 
