@@ -13,14 +13,18 @@ import com.toyrobotworkshop.auspex.ui.main.CameraStatus
 import com.toyrobotworkshop.auspex.ui.main.CameraViewModel
 import com.toyrobotworkshop.auspex.ui.main.NoDeviceScreen
 import com.toyrobotworkshop.auspex.ui.settings.SettingsScreen
+import kotlinx.serialization.Serializable
 
 /**
- * Routes in the app.
+ * Type-safe navigation destinations.
+ *
+ * Using sealed classes with @Serializable routes eliminates string typos at compile time
+ * and gives us IDE autocomplete for all destinations.
  */
-object Routes {
-    const val CAMERA = "camera"
-    const val NO_DEVICE = "no_device"
-    const val SETTINGS = "settings"
+sealed class Screen {
+    @Serializable data object Camera : Screen()
+    @Serializable data object NoDevice : Screen()
+    @Serializable data object Settings : Screen()
 }
 
 @Composable
@@ -38,19 +42,17 @@ fun NavGraph(
     LaunchedEffect(uiState.status) {
         when (uiState.status) {
             CameraStatus.NoCamera -> {
-                val current = navController.currentBackStackEntry?.destination?.route
-                if (current != Routes.NO_DEVICE) {
-                    navController.navigate(Routes.NO_DEVICE) {
-                        popUpTo(Routes.CAMERA) { inclusive = true }
+                if (!navController.currentBackStackEntry?.destination?.route.isNullOrEmpty()) {
+                    navController.navigate(Screen.NoDevice) {
+                        popUpTo(navController.graph.id) { inclusive = true }
                     }
                 }
             }
             // Auto-navigate: no_device → camera when camera reconnects and becomes ready
             CameraStatus.Ready, CameraStatus.Previewing -> {
-                val current = navController.currentBackStackEntry?.destination?.route
-                if (current == Routes.NO_DEVICE) {
-                    navController.navigate(Routes.CAMERA) {
-                        popUpTo(Routes.NO_DEVICE) { inclusive = true }
+                if (!navController.currentBackStackEntry?.destination?.route.isNullOrEmpty()) {
+                    navController.navigate(Screen.Camera) {
+                        popUpTo(navController.graph.id) { inclusive = true }
                     }
                 }
             }
@@ -60,20 +62,20 @@ fun NavGraph(
 
     NavHost(
         navController = navController,
-        startDestination = Routes.CAMERA,
+        startDestination = Screen.Camera,
     ) {
-        composable(Routes.CAMERA) {
+        composable<Screen.Camera> {
             CameraScreen(
                 viewModel = viewModel,
-                onSettingsClick = { navController.navigate(Routes.SETTINGS) },
+                onSettingsClick = { navController.navigate(Screen.Settings) },
             )
         }
-        composable(Routes.NO_DEVICE) {
+        composable<Screen.NoDevice> {
             NoDeviceScreen(
                 onRetry = { viewModel.detectAndInitialize(navController.context) },
             )
         }
-        composable(Routes.SETTINGS) {
+        composable<Screen.Settings> {
             SettingsScreen(
                 onBack = { navController.popBackStack() },
             )

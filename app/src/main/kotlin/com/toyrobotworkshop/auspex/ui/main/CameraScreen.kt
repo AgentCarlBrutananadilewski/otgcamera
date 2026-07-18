@@ -110,7 +110,7 @@ fun CameraScreen(
                         modifier = Modifier.padding(32.dp),
                     ) {
                         Text(
-                            text = "Camera Error",
+                            text = stringResource(R.string.camera_error),
                             style = MaterialTheme.typography.headlineSmall,
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -121,7 +121,7 @@ fun CameraScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(onClick = { viewModel.detectAndInitialize(context) }) {
-                            Text("Retry")
+                            Text(stringResource(R.string.retry))
                         }
                     }
                 }
