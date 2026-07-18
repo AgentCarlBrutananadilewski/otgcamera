@@ -1,5 +1,8 @@
 package com.toyrobotworkshop.auspex.ui.main
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -15,7 +18,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.toyrobotworkshop.auspex.R
 import com.toyrobotworkshop.auspex.util.FileSaver
 
 /**
@@ -33,9 +38,18 @@ fun CameraScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
 
-    // Auto-detect camera on launch
+    // Runtime CAMERA permission
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { isGranted ->
+        if (isGranted) {
+            viewModel.detectAndInitialize(context)
+        }
+    }
+
+    // Request permission on launch
     LaunchedEffect(Unit) {
-        viewModel.detectAndInitialize(context)
+        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
     }
 
     val statusMessage = uiState.message?.takeIf { it.isNotEmpty() }
@@ -44,13 +58,15 @@ fun CameraScreen(
         containerColor = Color.Black,
         contentWindowInsets = WindowInsets(0),
     ) { padding ->
+        val isCameraReady = uiState.status == CameraStatus.Ready ||
+                uiState.status == CameraStatus.Previewing
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .then(if (isCameraReady) Modifier.keepScreenOn else Modifier),
         ) {
-            val isCameraReady = uiState.status == CameraStatus.Ready ||
-                    uiState.status == CameraStatus.Previewing
 
             if (isCameraReady) {
                 PreviewView(
@@ -75,7 +91,7 @@ fun CameraScreen(
                         CircularProgressIndicator()
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = statusMessage ?: "Initializing camera...",
+                            text = statusMessage ?: stringResource(R.string.initializing_camera),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }

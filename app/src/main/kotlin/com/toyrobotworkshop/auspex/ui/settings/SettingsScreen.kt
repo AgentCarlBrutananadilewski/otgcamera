@@ -16,10 +16,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.toyrobotworkshop.auspex.BuildConfig
+import com.toyrobotworkshop.auspex.R
 import com.toyrobotworkshop.auspex.camera.FocusMode
 import com.toyrobotworkshop.auspex.camera.WhiteBalanceMode
 import com.toyrobotworkshop.auspex.util.DiagnosticLogger
@@ -70,12 +72,12 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text(stringResource(R.string.settings_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = stringResource(R.string.back)
                         )
                     }
                 },
@@ -99,14 +101,14 @@ fun SettingsScreen(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text("Build Information", style = MaterialTheme.typography.titleMedium)
+                        Text(stringResource(R.string.build_info_title), style = MaterialTheme.typography.titleMedium)
                         HorizontalDivider()
-                        DiagnosticRow(label = "App Version", value = versionName)
-                        DiagnosticRow(label = "Build Number", value = versionCodeStr)
-                        DiagnosticRow(label = "BuildConfig Version", value = BuildConfig.VERSION_NAME)
-                        DiagnosticRow(label = "BuildConfig Code", value = BuildConfig.BUILD_NUMBER.toString())
-                        DiagnosticRow(label = "Build Time", value = BuildConfig.BUILD_TIME)
-                        DiagnosticRow(label = "Git SHA", value = BuildConfig.GIT_SHA)
+                        DiagnosticRow(label = stringResource(R.string.app_version), value = versionName)
+                        DiagnosticRow(label = stringResource(R.string.build_number), value = versionCodeStr)
+                        DiagnosticRow(label = stringResource(R.string.buildconfig_version), value = BuildConfig.VERSION_NAME)
+                        DiagnosticRow(label = stringResource(R.string.buildconfig_code), value = BuildConfig.BUILD_NUMBER.toString())
+                        DiagnosticRow(label = stringResource(R.string.build_time), value = BuildConfig.BUILD_TIME)
+                        DiagnosticRow(label = stringResource(R.string.git_sha), value = BuildConfig.GIT_SHA)
                     }
                 }
             }
@@ -118,13 +120,13 @@ fun SettingsScreen(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text("Device Information", style = MaterialTheme.typography.titleMedium)
+                        Text(stringResource(R.string.device_info_title), style = MaterialTheme.typography.titleMedium)
                         HorizontalDivider()
-                        DiagnosticRow(label = "Device", value = "${Build.MANUFACTURER} ${Build.MODEL}")
-                        DiagnosticRow(label = "Android Version", value = Build.VERSION.RELEASE)
-                        DiagnosticRow(label = "SDK Int", value = Build.VERSION.SDK_INT.toString())
-                        DiagnosticRow(label = "Board", value = Build.BOARD)
-                        DiagnosticRow(label = "Brand", value = Build.BRAND)
+                        DiagnosticRow(label = stringResource(R.string.device_label), value = "${Build.MANUFACTURER} ${Build.MODEL}")
+                        DiagnosticRow(label = stringResource(R.string.android_version), value = Build.VERSION.RELEASE)
+                        DiagnosticRow(label = stringResource(R.string.sdk_int), value = Build.VERSION.SDK_INT.toString())
+                        DiagnosticRow(label = stringResource(R.string.board), value = Build.BOARD)
+                        DiagnosticRow(label = stringResource(R.string.brand), value = Build.BRAND)
                     }
                 }
             }
@@ -136,11 +138,11 @@ fun SettingsScreen(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text("Package Information", style = MaterialTheme.typography.titleMedium)
+                        Text(stringResource(R.string.package_info_title), style = MaterialTheme.typography.titleMedium)
                         HorizontalDivider()
-                        DiagnosticRow(label = "Package Name", value = packageName)
-                        DiagnosticRow(label = "First Install", value = packageInfo?.firstInstallTime?.let { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(it) } ?: "unknown")
-                        DiagnosticRow(label = "Last Updated", value = packageInfo?.lastUpdateTime?.let { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(it) } ?: "unknown")
+                        DiagnosticRow(label = stringResource(R.string.package_name), value = packageName)
+                        DiagnosticRow(label = stringResource(R.string.first_install), value = packageInfo?.firstInstallTime?.let { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(it) } ?: "unknown")
+                        DiagnosticRow(label = stringResource(R.string.last_updated), value = packageInfo?.lastUpdateTime?.let { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(it) } ?: "unknown")
                     }
                 }
             }
@@ -165,10 +167,10 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text("Runtime Diagnostics", style = MaterialTheme.typography.titleMedium)
+                            Text(stringResource(R.string.runtime_diagnostics), style = MaterialTheme.typography.titleMedium)
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 TextButton(onClick = { DiagnosticLogger.clear() }) {
-                                    Text("Clear")
+                                    Text(stringResource(R.string.clear))
                                 }
                                 TextButton(onClick = {
                                     if (logText.isNotBlank()) {
@@ -177,7 +179,7 @@ fun SettingsScreen(
                                         copied = true
                                     }
                                 }) {
-                                    Text(if (copied) "✓ Copied" else "Copy")
+                                    Text(if (copied) stringResource(R.string.copied) else stringResource(R.string.copy))
                                 }
                             }
                         }
@@ -185,7 +187,7 @@ fun SettingsScreen(
 
                         if (events.isEmpty()) {
                             Text(
-                                text = "No events yet. Try initializing the camera.",
+                                text = stringResource(R.string.no_events),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -235,24 +237,24 @@ private fun CameraControlsSection() {
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Camera Controls", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.controls_title), style = MaterialTheme.typography.titleMedium)
             HorizontalDivider()
 
-            Text("Exposure Time (µs)")
+            Text(stringResource(R.string.exposure_label))
             Slider(
                 value = exposureTime.toFloat(),
                 onValueChange = { exposureTime = it.toLong() },
                 valueRange = 0f..10000f,
             )
 
-            Text("Gain (ISO)")
+            Text(stringResource(R.string.gain_label))
             Slider(
                 value = gain,
                 onValueChange = { gain = it },
                 valueRange = 1.0f..16.0f,
             )
 
-            Text("White Balance")
+            Text(stringResource(R.string.white_balance_label))
             Row(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 modifier = Modifier.fillMaxWidth(),
@@ -266,7 +268,7 @@ private fun CameraControlsSection() {
                 }
             }
 
-            Text("Focus Mode")
+            Text(stringResource(R.string.focus_mode_label))
             Row(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 modifier = Modifier.fillMaxWidth(),
@@ -280,28 +282,28 @@ private fun CameraControlsSection() {
                 }
             }
 
-            Text("Brightness")
+            Text(stringResource(R.string.brightness_label))
             Slider(
                 value = brightness.toFloat(),
                 onValueChange = { brightness = it.toInt() },
                 valueRange = -128f..127f,
             )
 
-            Text("Contrast")
+            Text(stringResource(R.string.contrast_label))
             Slider(
                 value = contrast.toFloat(),
                 onValueChange = { contrast = it.toInt() },
                 valueRange = -128f..127f,
             )
 
-            Text("Saturation")
+            Text(stringResource(R.string.saturation_label))
             Slider(
                 value = saturation.toFloat(),
                 onValueChange = { saturation = it.toInt() },
                 valueRange = 0f..255f,
             )
 
-            Text("Sharpness")
+            Text(stringResource(R.string.sharpness_label))
             Slider(
                 value = sharpness.toFloat(),
                 onValueChange = { sharpness = it.toInt() },
@@ -314,7 +316,7 @@ private fun CameraControlsSection() {
                 onClick = { /* TODO: apply controls to camera */ },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Apply")
+                Text(stringResource(R.string.apply))
             }
         }
     }

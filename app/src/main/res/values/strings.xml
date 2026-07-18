@@ -12,7 +12,7 @@
     <!-- Controls -->
     <string name="controls_title">Camera Controls</string>
     <string name="resolution_label">Resolution</string>
-    <string name="exposure_label">Exposure Time</string>
+    <string name="exposure_label">Exposure Time (µs)</string>
     <string name="gain_label">Gain (ISO)</string>
     <string name="white_balance_label">White Balance</string>
     <string name="focus_mode_label">Focus Mode</string>
@@ -34,6 +34,7 @@
     <string name="stop_recording">Stop Recording</string>
     <string name="open_controls">Camera Controls</string>
     <string name="close_controls">Close Controls</string>
+    <string name="apply">Apply</string>
 
     <!-- Recording -->
     <string name="recording_service_channel">Recording</string>
@@ -45,4 +46,36 @@
     <string name="error_capture_failed">Failed to capture photo</string>
     <string name="error_recording_failed">Failed to start recording</string>
     <string name="error_usb_permission_denied">USB permission denied. Please allow USB access.</string>
+
+    <!-- Settings screen -->
+    <string name="settings_title">Settings</string>
+    <string name="back">Back</string>
+    <string name="build_info_title">Build Information</string>
+    <string name="app_version">App Version</string>
+    <string name="build_number">Build Number</string>
+    <string name="buildconfig_version">BuildConfig Version</string>
+    <string name="buildconfig_code">BuildConfig Code</string>
+    <string name="build_time">Build Time</string>
+    <string name="git_sha">Git SHA</string>
+    <string name="device_info_title">Device Information</string>
+    <string name="device_label">Device</string>
+    <string name="android_version">Android Version</string>
+    <string name="sdk_int">SDK Int</string>
+    <string name="board">Board</string>
+    <string name="brand">Brand</string>
+    <string name="package_info_title">Package Information</string>
+    <string name="package_name">Package Name</string>
+    <string name="first_install">First Install</string>
+    <string name="last_updated">Last Updated</string>
+    <string name="runtime_diagnostics">Runtime Diagnostics</string>
+    <string name="clear">Clear</string>
+    <string name="copy">Copy</string>
+    <string name="copied">✓ Copied</string>
+    <string name="no_events">No events yet. Try initializing the camera.</string>
+
+    <!-- Camera screen -->
+    <string name="camera_error">Camera Error</string>
+    <string name="retry">Retry</string>
+    <string name="initializing_camera">Initializing camera…</string>
+    <string name="gallery">Gallery</string>
 </resources>
