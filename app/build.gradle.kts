@@ -14,7 +14,7 @@ fun getBuildCounter(): Int {
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.ksp)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.kotlin.serialization)
@@ -112,7 +112,7 @@ dependencies {
 
     // Hilt DI
     implementation(libs.hilt.android)
-    kapt(libs.hilt.compiler)
+    ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
 
     // UVCCamera library (alexey-pelykh fork)
