@@ -52,6 +52,18 @@ fun CameraScreen(
         cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
     }
 
+    // Keep screen on only when camera is ready/previewing
+    val view = androidx.compose.ui.platform.LocalView.current
+    DisposableEffect(uiState.status) {
+        val shouldKeepOn = uiState.status == CameraStatus.Ready || uiState.status == CameraStatus.Previewing
+        if (shouldKeepOn) {
+            view.keepScreenOn = true
+        }
+        onDispose {
+            view.keepScreenOn = false
+        }
+    }
+
     val statusMessage = uiState.message?.takeIf { it.isNotEmpty() }
 
     Scaffold(
@@ -64,8 +76,7 @@ fun CameraScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .then(if (isCameraReady) Modifier.keepScreenOn else Modifier),
+                .padding(padding),
         ) {
 
             if (isCameraReady) {
