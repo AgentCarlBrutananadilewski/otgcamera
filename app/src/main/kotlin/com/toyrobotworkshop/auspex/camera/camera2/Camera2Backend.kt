@@ -77,7 +77,7 @@ class Camera2Backend @Inject constructor(
     override val isCapturingPhoto: Boolean
         get() = false // TODO: track capture state
     override val isRecording: Boolean
-        get() = _state is CameraInterface.State.Recording
+        get() = state is CameraInterface.State.Recording
 
     /**
      * Initialize the backend with a specific camera ID.

@@ -181,7 +181,9 @@ class CameraViewModel @Inject constructor(
 
             // Collect state changes via flow instead of polling
             val cam = camera ?: return
-            kotlinx.coroutines.launch {
+
+            // Launch a background collector to update UI on state changes
+            viewModelScope.launch {
                 cam.stateFlow.collect { state ->
                     when (state) {
                         is CameraInterface.State.Ready -> {
@@ -215,14 +217,14 @@ class CameraViewModel @Inject constructor(
             }
 
             // Wait for a terminal state (Ready or Error) with timeout
-            val job = kotlinx.coroutines.launch {
+            val job = viewModelScope.launch {
                 cam.stateFlow.collect { state ->
                     if (state is CameraInterface.State.Ready || state is CameraInterface.State.Error) {
                         return@collect
                     }
                 }
             }
-            kotlinx.coroutines.withTimeoutOrNull(10_000) {
+            kotlinx.coroutines.withTimeoutOrNull(10_000L) {
                 job.join()
             }
 

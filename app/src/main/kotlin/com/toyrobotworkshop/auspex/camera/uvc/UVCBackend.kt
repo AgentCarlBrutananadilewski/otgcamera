@@ -84,7 +84,7 @@ class UVCBackend @Inject constructor(
     override val isCapturingPhoto: Boolean
         get() = false // TODO: track capture state
     override val isRecording: Boolean
-        get() = _state is CameraInterface.State.Recording
+        get() = state is CameraInterface.State.Recording
 
     // USB device we're connected to
     private var connectedDevice: UsbDevice? = null
@@ -415,8 +415,8 @@ class UVCBackend @Inject constructor(
     }
 
     override suspend fun startPreview(surfaceTexture: SurfaceTexture) {
-        DiagnosticLogger.camera("startPreview() called — state=$_state")
-        val camera = uvccamera ?: throw IllegalStateException("UVC camera not opened — state=$_state")
+        DiagnosticLogger.camera("startPreview() called — state=${state}")
+        val camera = uvccamera ?: throw IllegalStateException("UVC camera not opened — state=${state}")
 
         // All UVCCamera operations must run on the same handler thread as openCamera
         val handler = cameraHandler ?: throw IllegalStateException("Camera handler thread not initialized")
