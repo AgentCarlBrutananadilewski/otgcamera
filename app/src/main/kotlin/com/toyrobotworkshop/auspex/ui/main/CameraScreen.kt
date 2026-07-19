@@ -6,17 +6,21 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CameraAlt
+import androidx.compose.material.icons.rounded.FiberManualRecord
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.StopCircle
+import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import com.toyrobotworkshop.auspex.R
 import com.toyrobotworkshop.auspex.util.FileSaver
 
@@ -61,6 +65,18 @@ fun CameraScreen(
         }
     }
 
+    // Hide status bar while camera screen is active
+    val activity = (context as? android.app.Activity)
+    DisposableEffect(Unit) {
+        val controller = activity?.window?.let {
+            WindowCompat.getInsetsController(it, it.decorView)
+        }
+        controller?.hide(WindowInsetsCompat.Type.statusBars())
+        onDispose {
+            controller?.show(WindowInsetsCompat.Type.statusBars())
+        }
+    }
+
     val isCameraReady = uiState.status == CameraStatus.Ready ||
             uiState.status == CameraStatus.Previewing
     val isRecording = uiState.isRecording
@@ -71,68 +87,50 @@ fun CameraScreen(
         bottomBar = {
             if (isCameraReady) {
                 BottomAppBar(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f),
-                    actions = {
-                        // Gallery
-                        IconButton(onClick = { /* TODO: show gallery */ }) {
-                            Icon(
-                                imageVector = Icons.Rounded.PhotoLibrary,
-                                contentDescription = stringResource(R.string.action_gallery),
-                            )
-                        }
+                    containerColor = Color(0xCC000000),
+                    contentPadding = PaddingValues(horizontal = 8.dp),
+                ) {
+                    // ── Left: navigation ──────────────────────────────
+                    CameraIconButton(
+                        imageVector = Icons.Rounded.PhotoLibrary,
+                        contentDescription = stringResource(R.string.action_gallery),
+                        onClick = { /* TODO: gallery */ },
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    CameraIconButton(
+                        imageVector = Icons.Rounded.Settings,
+                        contentDescription = stringResource(R.string.action_settings),
+                        onClick = onSettingsClick,
+                    )
 
-                        // Capture photo
-                        IconButton(onClick = {
-                            val path = com.toyrobotworkshop.auspex.util.FileSaver.getPhotoPath(context.cacheDir)
-                            viewModel.capturePhoto(path)
-                        }) {
-                            Icon(
-                                imageVector = Icons.Rounded.CameraAlt,
-                                contentDescription = stringResource(R.string.capture_photo),
-                            )
-                        }
+                    Spacer(Modifier.weight(1f))
 
-                        // Settings
-                        IconButton(onClick = onSettingsClick) {
-                            Icon(
-                                imageVector = Icons.Rounded.Settings,
-                                contentDescription = stringResource(R.string.action_settings),
-                            )
-                        }
-                    },
-                    floatingActionButton = {
-                        // Primary capture action — LargeFloatingActionButton
-                        LargeFloatingActionButton(
-                            onClick = {
-                                if (isRecording) {
-                                    viewModel.stopRecording()
-                                } else {
-                                    val path = com.toyrobotworkshop.auspex.util.FileSaver.getVideoPath(context.cacheDir)
-                                    viewModel.startRecording(path)
-                                }
-                            },
-                            containerColor = if (isRecording)
-                                MaterialTheme.colorScheme.errorContainer
-                            else
-                                MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = if (isRecording)
-                                MaterialTheme.colorScheme.onErrorContainer
-                            else
-                                MaterialTheme.colorScheme.onPrimaryContainer,
-                        ) {
-                            Icon(
-                                imageVector = if (isRecording)
-                                    Icons.Rounded.StopCircle
-                                else
-                                    Icons.Rounded.CameraAlt,
-                                contentDescription = stringResource(
-                                    if (isRecording) R.string.stop_recording else R.string.start_recording
-                                ),
-                                modifier = Modifier.size(36.dp),
-                            )
-                        }
-                    },
-                )
+                    // ── Right: camera actions ─────────────────────────
+                    // Record / Stop — red when active
+                    CameraIconButton(
+                        imageVector = if (isRecording) Icons.Rounded.Stop
+                                      else             Icons.Rounded.FiberManualRecord,
+                        contentDescription = stringResource(
+                            if (isRecording) R.string.stop_recording else R.string.start_recording
+                        ),
+                        onClick = {
+                            if (isRecording) {
+                                viewModel.stopRecording()
+                            } else {
+                                viewModel.startRecording(FileSaver.getVideoPath(context.cacheDir))
+                            }
+                        },
+                        containerColor = if (isRecording) Color(0xFFB71C1C) else Color(0xFF2A2A2A),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    // Shutter — always tappable, even while recording
+                    CameraIconButton(
+                        imageVector = Icons.Rounded.CameraAlt,
+                        contentDescription = stringResource(R.string.capture_photo),
+                        onClick = { viewModel.capturePhoto(FileSaver.getPhotoPath(context.cacheDir)) },
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
             }
         },
     ) { padding ->
@@ -201,5 +199,31 @@ fun CameraScreen(
                 }
             }
         }
+    }
+}
+
+/** Fixed-colour circular icon button for use over a camera preview. */
+@Composable
+private fun CameraIconButton(
+    imageVector: ImageVector,
+    contentDescription: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    containerColor: Color = Color(0xFF2A2A2A),
+    contentColor: Color = Color.White,
+) {
+    FilledIconButton(
+        onClick = onClick,
+        modifier = modifier.size(52.dp),
+        colors = IconButtonDefaults.filledIconButtonColors(
+            containerColor = containerColor,
+            contentColor = contentColor,
+        ),
+    ) {
+        Icon(
+            imageVector = imageVector,
+            contentDescription = contentDescription,
+            modifier = Modifier.size(24.dp),
+        )
     }
 }
