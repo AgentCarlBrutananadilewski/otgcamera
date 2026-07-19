@@ -155,6 +155,7 @@ class CameraViewModel @Inject constructor(
                 status = CameraStatus.Ready,
                 backendType = CameraInterface.BackendType.CAMERA2,
                 resolution = cam.resolution,
+                controls = cam.controls,
                 message = "Camera2 backend initialized"
             )
         } catch (e: Exception) {
@@ -192,6 +193,7 @@ class CameraViewModel @Inject constructor(
                                 backendType = CameraInterface.BackendType.UVCCAMERA,
                                 // Expose the actual resolution so PreviewView can constrain its aspect ratio
                                 resolution = cam.resolution,
+                                controls = cam.controls,
                                 message = "UVC camera ready"
                             )
                             Log.d(tag, "UVC backend ready, resolution=${cam.resolution}")
@@ -319,6 +321,8 @@ data class CameraUiState(
     // Actual camera resolution — used by PreviewView to maintain correct aspect ratio.
     // Null until the camera is Ready (resolution is unknown before then).
     val resolution: com.toyrobotworkshop.auspex.camera.Size? = null,
+    // Current camera controls — exposed so SettingsScreen can read/write them.
+    val controls: com.toyrobotworkshop.auspex.camera.CameraControls? = null,
 )
 
 sealed interface CameraStatus {

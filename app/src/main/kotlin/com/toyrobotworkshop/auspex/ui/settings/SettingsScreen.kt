@@ -3,12 +3,11 @@ package com.toyrobotworkshop.auspex.ui.settings
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.os.Build
-import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.*
@@ -17,21 +16,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.toyrobotworkshop.auspex.BuildConfig
 import com.toyrobotworkshop.auspex.R
+import com.toyrobotworkshop.auspex.camera.CameraControls
 import com.toyrobotworkshop.auspex.camera.FocusMode
 import com.toyrobotworkshop.auspex.camera.WhiteBalanceMode
+import com.toyrobotworkshop.auspex.ui.main.CameraViewModel
 import com.toyrobotworkshop.auspex.util.DiagnosticLogger
 
 /**
  * Settings screen with camera controls, build info, and runtime diagnostics.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SettingsScreen(
+    viewModel: CameraViewModel,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -69,6 +70,10 @@ fun SettingsScreen(
         }
     }
 
+    // Camera controls — wired to ViewModel
+    val uiState by viewModel.uiState.collectAsState()
+    var controls by remember { mutableStateOf(uiState.controls ?: CameraControls()) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -87,67 +92,357 @@ fun SettingsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(padding),
+            state = rememberLazyListState(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // 1. Camera Controls
-            item { CameraControlsSection() }
-
-            // 2. Build Information
+            // 1. Camera Controls (sticky header)
+            stickyHeader {
+                Text(
+                    text = stringResource(R.string.section_camera_controls),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Text(stringResource(R.string.build_info_title), style = MaterialTheme.typography.titleMedium)
-                        HorizontalDivider()
-                        DiagnosticRow(label = stringResource(R.string.app_version), value = versionName)
-                        DiagnosticRow(label = stringResource(R.string.build_number), value = versionCodeStr)
-                        DiagnosticRow(label = stringResource(R.string.buildconfig_version), value = BuildConfig.VERSION_NAME)
-                        DiagnosticRow(label = stringResource(R.string.buildconfig_code), value = BuildConfig.BUILD_NUMBER.toString())
-                        DiagnosticRow(label = stringResource(R.string.build_time), value = BuildConfig.BUILD_TIME)
-                        DiagnosticRow(label = stringResource(R.string.git_sha), value = BuildConfig.GIT_SHA)
+                        // Exposure time slider with value label
+                        Text(stringResource(R.string.exposure_label))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Slider(
+                                value = (controls.exposureTimeNs?.div(1_000) ?: 0f).toFloat(),
+                                onValueChange = {
+                                    controls = controls.copy(exposureTimeNs = (it * 1_000).toLong())
+                                },
+                                valueRange = 0f..10_000f,
+                                steps = 99,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                text = "${(controls.exposureTimeNs ?: 0L / 1_000)} µs",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
+
+                        // Gain slider with value label
+                        Text(stringResource(R.string.gain_label))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Slider(
+                                value = controls.gain ?: 1.0f,
+                                onValueChange = {
+                                    controls = controls.copy(gain = it)
+                                },
+                                valueRange = 1.0f..16.0f,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                text = "×${String.format("%.1f", controls.gain ?: 1.0f)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
+
+                        // White balance — ExposedDropdownMenuBox
+                        Text(stringResource(R.string.white_balance_label))
+                        var wbExpanded by remember { mutableStateOf(false) }
+                        ExposedDropdownMenuBox(
+                            expanded = wbExpanded,
+                            onExpandedChange = { wbExpanded = !wbExpanded },
+                        ) {
+                            OutlinedTextField(
+                                value = whiteBalanceDisplayName(controls.whiteBalanceMode),
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text(stringResource(R.string.white_balance_label)) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .menuAnchor(),
+                            )
+                            ExposedDropdownMenu(
+                                expanded = wbExpanded,
+                                onDismissRequest = { wbExpanded = false },
+                            ) {
+                                WhiteBalanceMode.values().forEach { mode ->
+                                    DropdownMenuItem(
+                                        text = { Text(whiteBalanceDisplayName(mode)) },
+                                        onClick = {
+                                            controls = controls.copy(whiteBalanceMode = mode)
+                                            wbExpanded = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
+
+                        // Focus mode — ExposedDropdownMenuBox
+                        Text(stringResource(R.string.focus_mode_label))
+                        var focusExpanded by remember { mutableStateOf(false) }
+                        ExposedDropdownMenuBox(
+                            expanded = focusExpanded,
+                            onExpandedChange = { focusExpanded = !focusExpanded },
+                        ) {
+                            OutlinedTextField(
+                                value = focusModeDisplayName(controls.focusMode),
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text(stringResource(R.string.focus_mode_label)) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .menuAnchor(),
+                            )
+                            ExposedDropdownMenu(
+                                expanded = focusExpanded,
+                                onDismissRequest = { focusExpanded = false },
+                            ) {
+                                FocusMode.values().forEach { mode ->
+                                    DropdownMenuItem(
+                                        text = { Text(focusModeDisplayName(mode)) },
+                                        onClick = {
+                                            controls = controls.copy(focusMode = mode)
+                                            focusExpanded = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
+
+                        // Brightness slider with value label
+                        Text(stringResource(R.string.brightness_label))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Slider(
+                                value = (controls.brightness ?: 0).toFloat(),
+                                onValueChange = {
+                                    controls = controls.copy(brightness = it.toInt())
+                                },
+                                valueRange = -128f..127f,
+                                steps = 255,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                text = "${controls.brightness ?: 0}",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
+
+                        // Contrast slider with value label
+                        Text(stringResource(R.string.contrast_label))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Slider(
+                                value = (controls.contrast ?: 0).toFloat(),
+                                onValueChange = {
+                                    controls = controls.copy(contrast = it.toInt())
+                                },
+                                valueRange = -128f..127f,
+                                steps = 255,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                text = "${controls.contrast ?: 0}",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
+
+                        // Saturation slider with value label
+                        Text(stringResource(R.string.saturation_label))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Slider(
+                                value = (controls.saturation ?: 128).toFloat(),
+                                onValueChange = {
+                                    controls = controls.copy(saturation = it.toInt())
+                                },
+                                valueRange = 0f..255f,
+                                steps = 255,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                text = "${controls.saturation ?: 128}",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
+
+                        // Sharpness slider with value label
+                        Text(stringResource(R.string.sharpness_label))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Slider(
+                                value = (controls.sharpness ?: 128).toFloat(),
+                                onValueChange = {
+                                    controls = controls.copy(sharpness = it.toInt())
+                                },
+                                valueRange = 0f..255f,
+                                steps = 255,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                text = "${controls.sharpness ?: 128}",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Button(
+                            onClick = { /* TODO: apply controls to camera */ },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.apply))
+                        }
                     }
                 }
             }
 
-            // 3. Device Information
+            // 2. Build Information (sticky header)
+            stickyHeader {
+                Text(
+                    text = stringResource(R.string.section_build_info),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        Text(stringResource(R.string.device_info_title), style = MaterialTheme.typography.titleMedium)
-                        HorizontalDivider()
-                        DiagnosticRow(label = stringResource(R.string.device_label), value = "${Build.MANUFACTURER} ${Build.MODEL}")
-                        DiagnosticRow(label = stringResource(R.string.android_version), value = Build.VERSION.RELEASE)
-                        DiagnosticRow(label = stringResource(R.string.sdk_int), value = Build.VERSION.SDK_INT.toString())
-                        DiagnosticRow(label = stringResource(R.string.board), value = Build.BOARD)
-                        DiagnosticRow(label = stringResource(R.string.brand), value = Build.BRAND)
+                        DiagnosticListItem(
+                            label = stringResource(R.string.app_version),
+                            value = BuildConfig.VERSION_NAME,
+                        )
+                        DiagnosticListItem(
+                            label = stringResource(R.string.build_number),
+                            value = BuildConfig.BUILD_NUMBER.toString(),
+                        )
+                        DiagnosticListItem(
+                            label = stringResource(R.string.build_time),
+                            value = BuildConfig.BUILD_TIME,
+                        )
+                        DiagnosticListItem(
+                            label = stringResource(R.string.git_sha),
+                            value = BuildConfig.GIT_SHA,
+                        )
                     }
                 }
             }
 
-            // 4. Package Information
+            // 3. Device Information (sticky header)
+            stickyHeader {
+                Text(
+                    text = stringResource(R.string.section_device_info),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        Text(stringResource(R.string.package_info_title), style = MaterialTheme.typography.titleMedium)
-                        HorizontalDivider()
-                        DiagnosticRow(label = stringResource(R.string.package_name), value = packageName)
-                        DiagnosticRow(label = stringResource(R.string.first_install), value = packageInfo?.firstInstallTime?.let { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(it) } ?: "unknown")
-                        DiagnosticRow(label = stringResource(R.string.last_updated), value = packageInfo?.lastUpdateTime?.let { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(it) } ?: "unknown")
+                        DiagnosticListItem(
+                            label = stringResource(R.string.device_label),
+                            value = "${Build.MANUFACTURER} ${Build.MODEL}",
+                        )
+                        DiagnosticListItem(
+                            label = stringResource(R.string.android_version),
+                            value = Build.VERSION.RELEASE,
+                        )
+                        DiagnosticListItem(
+                            label = stringResource(R.string.sdk_int),
+                            value = Build.VERSION.SDK_INT.toString(),
+                        )
+                        DiagnosticListItem(
+                            label = stringResource(R.string.board),
+                            value = Build.BOARD,
+                        )
+                        DiagnosticListItem(
+                            label = stringResource(R.string.brand),
+                            value = Build.BRAND,
+                        )
                     }
                 }
             }
 
-            // 5. Runtime Diagnostics (moved to bottom)
+            // 4. Package Information (sticky header)
+            stickyHeader {
+                Text(
+                    text = stringResource(R.string.section_package_info),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        DiagnosticListItem(
+                            label = stringResource(R.string.package_name),
+                            value = packageName,
+                        )
+                        DiagnosticListItem(
+                            label = stringResource(R.string.first_install),
+                            value = packageInfo?.firstInstallTime?.let { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(it) } ?: "unknown",
+                        )
+                        DiagnosticListItem(
+                            label = stringResource(R.string.last_updated),
+                            value = packageInfo?.lastUpdateTime?.let { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(it) } ?: "unknown",
+                        )
+                    }
+                }
+            }
+
+            // 5. Runtime Diagnostics (sticky header)
+            stickyHeader {
+                Text(
+                    text = stringResource(R.string.section_diagnostics),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -155,7 +450,7 @@ fun SettingsScreen(
                         containerColor = if (events.any { it.category == "ERROR" })
                             MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
                         else
-                            MaterialTheme.colorScheme.surface
+                            MaterialTheme.colorScheme.surface,
                     ),
                 ) {
                     Column(
@@ -164,26 +459,22 @@ fun SettingsScreen(
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            horizontalArrangement = Arrangement.End,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(stringResource(R.string.runtime_diagnostics), style = MaterialTheme.typography.titleMedium)
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                TextButton(onClick = { DiagnosticLogger.clear() }) {
-                                    Text(stringResource(R.string.clear))
+                            TextButton(onClick = { DiagnosticLogger.clear() }) {
+                                Text(stringResource(R.string.clear))
+                            }
+                            TextButton(onClick = {
+                                if (logText.isNotBlank()) {
+                                    val clipboard = context.getSystemService(ClipboardManager::class.java)
+                                    clipboard.setPrimaryClip(ClipData.newPlainText("Diagnostics", logText))
+                                    copied = true
                                 }
-                                TextButton(onClick = {
-                                    if (logText.isNotBlank()) {
-                                        val clipboard = context.getSystemService(ClipboardManager::class.java)
-                                        clipboard.setPrimaryClip(ClipData.newPlainText("Diagnostics", logText))
-                                        copied = true
-                                    }
-                                }) {
-                                    Text(if (copied) stringResource(R.string.copied) else stringResource(R.string.copy))
-                                }
+                            }) {
+                                Text(if (copied) stringResource(R.string.copied) else stringResource(R.string.copy))
                             }
                         }
-                        HorizontalDivider()
 
                         if (events.isEmpty()) {
                             Text(
@@ -192,26 +483,28 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         } else {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 300.dp)
-                                    .background(
-                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                                        shape = MaterialTheme.shapes.small,
-                                    )
-                                    .padding(8.dp),
+                            LazyColumn(
+                                modifier = Modifier.heightIn(max = 300.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
                             ) {
-                                BasicTextField(
-                                    value = logText,
-                                    onValueChange = {}, // read-only
-                                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
-                                    textStyle = TextStyle(
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    ),
-                                )
+                                items(events) { event ->
+                                    ListItem(
+                                        headlineContent = {
+                                            Text(
+                                                text = "[${event.category}] ${event.message}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontFamily = FontFamily.Monospace,
+                                            )
+                                        },
+                                        supportingContent = {
+                                            Text(
+                                                text = event.timestamp,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
@@ -221,127 +514,57 @@ fun SettingsScreen(
     }
 }
 
+/**
+ * Display name for a white balance mode — pulled from string resources.
+ */
 @Composable
-private fun CameraControlsSection() {
-    var exposureTime by remember { mutableStateOf(0L) }
-    var gain by remember { mutableStateOf(1.0f) }
-    var wbMode by remember { mutableStateOf(WhiteBalanceMode.AUTO) }
-    var focusMode by remember { mutableStateOf(FocusMode.CONTINUOUS_PICTURE) }
-    var brightness by remember { mutableStateOf(0) }
-    var contrast by remember { mutableStateOf(0) }
-    var saturation by remember { mutableStateOf(128) }
-    var sharpness by remember { mutableStateOf(128) }
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(stringResource(R.string.controls_title), style = MaterialTheme.typography.titleMedium)
-            HorizontalDivider()
-
-            Text(stringResource(R.string.exposure_label))
-            Slider(
-                value = exposureTime.toFloat(),
-                onValueChange = { exposureTime = it.toLong() },
-                valueRange = 0f..10000f,
-            )
-
-            Text(stringResource(R.string.gain_label))
-            Slider(
-                value = gain,
-                onValueChange = { gain = it },
-                valueRange = 1.0f..16.0f,
-            )
-
-            Text(stringResource(R.string.white_balance_label))
-            Row(
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                WhiteBalanceMode.values().forEach { mode ->
-                    FilterChip(
-                        selected = wbMode == mode,
-                        onClick = { wbMode = mode },
-                        label = { Text(mode.name) },
-                    )
-                }
-            }
-
-            Text(stringResource(R.string.focus_mode_label))
-            Row(
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                FocusMode.values().forEach { mode ->
-                    FilterChip(
-                        selected = focusMode == mode,
-                        onClick = { focusMode = mode },
-                        label = { Text(mode.name) },
-                    )
-                }
-            }
-
-            Text(stringResource(R.string.brightness_label))
-            Slider(
-                value = brightness.toFloat(),
-                onValueChange = { brightness = it.toInt() },
-                valueRange = -128f..127f,
-            )
-
-            Text(stringResource(R.string.contrast_label))
-            Slider(
-                value = contrast.toFloat(),
-                onValueChange = { contrast = it.toInt() },
-                valueRange = -128f..127f,
-            )
-
-            Text(stringResource(R.string.saturation_label))
-            Slider(
-                value = saturation.toFloat(),
-                onValueChange = { saturation = it.toInt() },
-                valueRange = 0f..255f,
-            )
-
-            Text(stringResource(R.string.sharpness_label))
-            Slider(
-                value = sharpness.toFloat(),
-                onValueChange = { sharpness = it.toInt() },
-                valueRange = 0f..255f,
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Button(
-                onClick = { /* TODO: apply controls to camera */ },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.apply))
-            }
-        }
+fun whiteBalanceDisplayName(mode: WhiteBalanceMode?): String {
+    return when (mode) {
+        WhiteBalanceMode.AUTO -> stringResource(R.string.wb_auto)
+        WhiteBalanceMode.INCANDESCENT -> stringResource(R.string.wb_incandescent)
+        WhiteBalanceMode.FLUORESCENT -> stringResource(R.string.wb_fluorescent)
+        WhiteBalanceMode.DAYLIGHT -> stringResource(R.string.wb_daylight)
+        WhiteBalanceMode.CLOUDY_DAYLIGHT -> stringResource(R.string.wb_cloudy)
+        WhiteBalanceMode.TWILIGHT -> stringResource(R.string.wb_twilight)
+        WhiteBalanceMode.SHADE -> stringResource(R.string.wb_shade)
+        WhiteBalanceMode.MANUAL -> stringResource(R.string.wb_manual)
+        null -> stringResource(R.string.mode_auto)
     }
 }
 
+/**
+ * Display name for a focus mode — pulled from string resources.
+ */
 @Composable
-private fun DiagnosticRow(
+fun focusModeDisplayName(mode: FocusMode?): String {
+    return when (mode) {
+        FocusMode.CONTINUOUS_PICTURE -> stringResource(R.string.focus_continuous)
+        FocusMode.AUTO -> stringResource(R.string.focus_auto)
+        FocusMode.FIXED -> stringResource(R.string.focus_fixed)
+        FocusMode.MANUAL -> stringResource(R.string.focus_manual)
+        FocusMode.MACRO -> stringResource(R.string.focus_macro)
+        FocusMode.INFINITY -> stringResource(R.string.focus_infinity)
+        FocusMode.EDGE -> stringResource(R.string.focus_edge)
+        null -> stringResource(R.string.mode_auto)
+    }
+}
+
+/**
+ * Diagnostic row using ListItem with headlineContent + supportingContent.
+ */
+@Composable
+private fun DiagnosticListItem(
     label: String,
     value: String,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(0.4f),
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.weight(0.6f),
-        )
-    }
+    ListItem(
+        headlineContent = { Text(text = label, style = MaterialTheme.typography.bodyMedium) },
+        supportingContent = {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+    )
 }

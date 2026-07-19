@@ -77,6 +77,7 @@ fun NavGraph(
         }
         composable<Screen.Settings> {
             SettingsScreen(
+                viewModel = viewModel,
                 onBack = { navController.popBackStack() },
             )
         }
