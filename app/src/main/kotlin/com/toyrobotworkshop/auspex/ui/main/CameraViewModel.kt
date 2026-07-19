@@ -305,12 +305,26 @@ class CameraViewModel @Inject constructor(
 
     fun startRecording(path: String) {
         val cam = camera ?: return
-        viewModelScope.launch { cam.startRecording(path) }
+        _uiState.value = _uiState.value.copy(isRecording = true)
+        viewModelScope.launch {
+            try {
+                cam.startRecording(path)
+            } catch (e: Exception) {
+                Log.e(tag, "Failed to start recording", e)
+                _uiState.value = _uiState.value.copy(isRecording = false)
+            }
+        }
     }
 
     fun stopRecording() {
         val cam = camera ?: return
-        viewModelScope.launch { cam.stopRecording() }
+        viewModelScope.launch {
+            try {
+                cam.stopRecording()
+            } finally {
+                _uiState.value = _uiState.value.copy(isRecording = false)
+            }
+        }
     }
 }
 
@@ -323,6 +337,8 @@ data class CameraUiState(
     val resolution: com.toyrobotworkshop.auspex.camera.Size? = null,
     // Current camera controls — exposed so SettingsScreen can read/write them.
     val controls: com.toyrobotworkshop.auspex.camera.CameraControls? = null,
+    // Whether video recording is currently active.
+    val isRecording: Boolean = false,
 )
 
 sealed interface CameraStatus {
