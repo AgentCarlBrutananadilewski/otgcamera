@@ -4,20 +4,26 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.os.Build
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.toyrobotworkshop.auspex.BuildConfig
 import com.toyrobotworkshop.auspex.R
 import com.toyrobotworkshop.auspex.camera.CameraControls
@@ -71,391 +77,207 @@ fun SettingsScreen(
     }
 
     // Camera controls — wired to ViewModel
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var controls by remember { mutableStateOf(uiState.controls ?: CameraControls()) }
 
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            TopAppBar(
+            LargeTopAppBar(
                 title = { Text(stringResource(R.string.settings_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                            contentDescription = stringResource(R.string.back)
+                            contentDescription = stringResource(R.string.back),
                         )
                     }
                 },
+                scrollBehavior = scrollBehavior
             )
         },
     ) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .padding(horizontal = 16.dp),
             state = rememberLazyListState(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(bottom = 32.dp)
         ) {
-            // 1. Camera Controls (sticky header)
-            stickyHeader {
-                Text(
-                    text = stringResource(R.string.section_camera_controls),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                )
-            }
+            // 1. Camera Controls
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        // Exposure time slider with value label
-                        Text(stringResource(R.string.exposure_label))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Slider(
-                                value = (controls.exposureTimeNs?.div(1_000) ?: 0f).toFloat(),
-                                onValueChange = {
-                                    controls = controls.copy(exposureTimeNs = (it * 1_000).toLong())
-                                },
-                                valueRange = 0f..10_000f,
-                                steps = 99,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Text(
-                                text = "${((controls.exposureTimeNs ?: 0L) / 1_000)} µs",
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(start = 8.dp),
-                            )
-                        }
+                SettingsGroup(title = stringResource(R.string.section_camera_controls)) {
+                    Column {
+                        // Exposure time
+                        SettingsSliderItem(
+                            label = stringResource(R.string.exposure_label),
+                            value = (controls.exposureTimeNs?.div(1_000) ?: 0f).toFloat(),
+                            onValueChange = {
+                                controls = controls.copy(exposureTimeNs = (it * 1_000).toLong())
+                            },
+                            valueRange = 0f..10_000f,
+                            steps = 99,
+                            valueDisplay = "${((controls.exposureTimeNs ?: 0L) / 1_000)} µs"
+                        )
 
-                        // Gain slider with value label
-                        Text(stringResource(R.string.gain_label))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Slider(
-                                value = controls.gain ?: 1.0f,
-                                onValueChange = {
-                                    controls = controls.copy(gain = it)
-                                },
-                                valueRange = 1.0f..16.0f,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Text(
-                                text = "×${String.format("%.1f", controls.gain ?: 1.0f)}",
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(start = 8.dp),
-                            )
-                        }
+                        // Gain
+                        SettingsSliderItem(
+                            label = stringResource(R.string.gain_label),
+                            value = controls.gain ?: 1.0f,
+                            onValueChange = {
+                                controls = controls.copy(gain = it)
+                            },
+                            valueRange = 1.0f..16.0f,
+                            valueDisplay = "×${"%.1f".format(controls.gain ?: 1.0f)}"
+                        )
 
-                        // White balance — ExposedDropdownMenuBox
-                        Text(stringResource(R.string.white_balance_label))
+                        // White balance
                         var wbExpanded by remember { mutableStateOf(false) }
-                        ExposedDropdownMenuBox(
+                        SettingsDropdownItem(
+                            label = stringResource(R.string.white_balance_label),
+                            value = whiteBalanceDisplayName(controls.whiteBalanceMode),
                             expanded = wbExpanded,
-                            onExpandedChange = { wbExpanded = !wbExpanded },
-                        ) {
-                            OutlinedTextField(
-                                value = whiteBalanceDisplayName(controls.whiteBalanceMode),
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text(stringResource(R.string.white_balance_label)) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .menuAnchor(type = ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled = true),
-                            )
-                            ExposedDropdownMenu(
-                                expanded = wbExpanded,
-                                onDismissRequest = { wbExpanded = false },
-                            ) {
-                                WhiteBalanceMode.entries.forEach { mode ->
-                                    DropdownMenuItem(
-                                        text = { Text(whiteBalanceDisplayName(mode)) },
-                                        onClick = {
-                                            controls = controls.copy(whiteBalanceMode = mode)
-                                            wbExpanded = false
-                                        },
-                                    )
-                                }
+                            onExpandedChange = { wbExpanded = it },
+                            options = WhiteBalanceMode.entries,
+                            optionLabel = { whiteBalanceDisplayName(it) },
+                            onOptionClick = {
+                                controls = controls.copy(whiteBalanceMode = it)
+                                wbExpanded = false
                             }
-                        }
+                        )
 
-                        // Focus mode — ExposedDropdownMenuBox
-                        Text(stringResource(R.string.focus_mode_label))
+                        // Focus mode
                         var focusExpanded by remember { mutableStateOf(false) }
-                        ExposedDropdownMenuBox(
+                        SettingsDropdownItem(
+                            label = stringResource(R.string.focus_mode_label),
+                            value = focusModeDisplayName(controls.focusMode),
                             expanded = focusExpanded,
-                            onExpandedChange = { focusExpanded = !focusExpanded },
+                            onExpandedChange = { focusExpanded = it },
+                            options = FocusMode.entries,
+                            optionLabel = { focusModeDisplayName(it) },
+                            onOptionClick = {
+                                controls = controls.copy(focusMode = it)
+                                focusExpanded = false
+                            }
+                        )
+
+                        // Brightness
+                        SettingsSliderItem(
+                            label = stringResource(R.string.brightness_label),
+                            value = (controls.brightness ?: 0).toFloat(),
+                            onValueChange = {
+                                controls = controls.copy(brightness = it.toInt())
+                            },
+                            valueRange = -128f..127f,
+                            steps = 255,
+                            valueDisplay = "${controls.brightness ?: 0}"
+                        )
+
+                        // Contrast
+                        SettingsSliderItem(
+                            label = stringResource(R.string.contrast_label),
+                            value = (controls.contrast ?: 0).toFloat(),
+                            onValueChange = {
+                                controls = controls.copy(contrast = it.toInt())
+                            },
+                            valueRange = -128f..127f,
+                            steps = 255,
+                            valueDisplay = "${controls.contrast ?: 0}"
+                        )
+
+                        // Saturation
+                        SettingsSliderItem(
+                            label = stringResource(R.string.saturation_label),
+                            value = (controls.saturation ?: 128).toFloat(),
+                            onValueChange = {
+                                controls = controls.copy(saturation = it.toInt())
+                            },
+                            valueRange = 0f..255f,
+                            steps = 255,
+                            valueDisplay = "${controls.saturation ?: 128}"
+                        )
+
+                        // Sharpness
+                        SettingsSliderItem(
+                            label = stringResource(R.string.sharpness_label),
+                            value = (controls.sharpness ?: 128).toFloat(),
+                            onValueChange = {
+                                controls = controls.copy(sharpness = it.toInt())
+                            },
+                            valueRange = 0f..255f,
+                            steps = 255,
+                            valueDisplay = "${controls.sharpness ?: 128}"
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            OutlinedTextField(
-                                value = focusModeDisplayName(controls.focusMode),
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text(stringResource(R.string.focus_mode_label)) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .menuAnchor(type = ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled = true),
-                            )
-                            ExposedDropdownMenu(
-                                expanded = focusExpanded,
-                                onDismissRequest = { focusExpanded = false },
+                            Button(
+                                onClick = { /* TODO: apply controls to camera */ },
+                                modifier = Modifier.fillMaxWidth(),
                             ) {
-                                FocusMode.entries.forEach { mode ->
-                                    DropdownMenuItem(
-                                        text = { Text(focusModeDisplayName(mode)) },
-                                        onClick = {
-                                            controls = controls.copy(focusMode = mode)
-                                            focusExpanded = false
-                                        },
-                                    )
-                                }
+                                Text(stringResource(R.string.apply))
                             }
                         }
-
-                        // Brightness slider with value label
-                        Text(stringResource(R.string.brightness_label))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Slider(
-                                value = (controls.brightness ?: 0).toFloat(),
-                                onValueChange = {
-                                    controls = controls.copy(brightness = it.toInt())
-                                },
-                                valueRange = -128f..127f,
-                                steps = 255,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Text(
-                                text = "${controls.brightness ?: 0}",
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(start = 8.dp),
-                            )
-                        }
-
-                        // Contrast slider with value label
-                        Text(stringResource(R.string.contrast_label))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Slider(
-                                value = (controls.contrast ?: 0).toFloat(),
-                                onValueChange = {
-                                    controls = controls.copy(contrast = it.toInt())
-                                },
-                                valueRange = -128f..127f,
-                                steps = 255,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Text(
-                                text = "${controls.contrast ?: 0}",
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(start = 8.dp),
-                            )
-                        }
-
-                        // Saturation slider with value label
-                        Text(stringResource(R.string.saturation_label))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Slider(
-                                value = (controls.saturation ?: 128).toFloat(),
-                                onValueChange = {
-                                    controls = controls.copy(saturation = it.toInt())
-                                },
-                                valueRange = 0f..255f,
-                                steps = 255,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Text(
-                                text = "${controls.saturation ?: 128}",
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(start = 8.dp),
-                            )
-                        }
-
-                        // Sharpness slider with value label
-                        Text(stringResource(R.string.sharpness_label))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Slider(
-                                value = (controls.sharpness ?: 128).toFloat(),
-                                onValueChange = {
-                                    controls = controls.copy(sharpness = it.toInt())
-                                },
-                                valueRange = 0f..255f,
-                                steps = 255,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Text(
-                                text = "${controls.sharpness ?: 128}",
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(start = 8.dp),
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Button(
-                            onClick = { /* TODO: apply controls to camera */ },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(stringResource(R.string.apply))
-                        }
                     }
                 }
             }
 
-            // 2. Build Information (sticky header)
-            stickyHeader {
-                Text(
-                    text = stringResource(R.string.section_build_info),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                )
-            }
+            // 2. Build Information
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        DiagnosticListItem(
-                            label = stringResource(R.string.app_version),
-                            value = BuildConfig.VERSION_NAME,
+                SettingsGroup(title = stringResource(R.string.section_build_info)) {
+                    Column {
+                        SettingsInfoItem(stringResource(R.string.app_version), BuildConfig.VERSION_NAME)
+                        SettingsInfoItem(stringResource(R.string.build_number), BuildConfig.BUILD_NUMBER.toString())
+                        SettingsInfoItem(stringResource(R.string.build_time), BuildConfig.BUILD_TIME)
+                        SettingsInfoItem(stringResource(R.string.git_sha), BuildConfig.GIT_SHA)
+                    }
+                }
+            }
+
+            // 3. Device Information
+            item {
+                SettingsGroup(title = stringResource(R.string.section_device_info)) {
+                    Column {
+                        SettingsInfoItem(stringResource(R.string.device_label), "${Build.MANUFACTURER} ${Build.MODEL}")
+                        SettingsInfoItem(stringResource(R.string.android_version), Build.VERSION.RELEASE)
+                        SettingsInfoItem(stringResource(R.string.sdk_int), Build.VERSION.SDK_INT.toString())
+                        SettingsInfoItem(stringResource(R.string.board), Build.BOARD)
+                        SettingsInfoItem(stringResource(R.string.brand), Build.BRAND)
+                    }
+                }
+            }
+
+            // 4. Package Information
+            item {
+                SettingsGroup(title = stringResource(R.string.section_package_info)) {
+                    Column {
+                        SettingsInfoItem(stringResource(R.string.package_name), packageName)
+                        SettingsInfoItem(
+                            stringResource(R.string.first_install),
+                            packageInfo?.firstInstallTime?.let { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(it) } ?: "unknown"
                         )
-                        DiagnosticListItem(
-                            label = stringResource(R.string.build_number),
-                            value = BuildConfig.BUILD_NUMBER.toString(),
-                        )
-                        DiagnosticListItem(
-                            label = stringResource(R.string.build_time),
-                            value = BuildConfig.BUILD_TIME,
-                        )
-                        DiagnosticListItem(
-                            label = stringResource(R.string.git_sha),
-                            value = BuildConfig.GIT_SHA,
+                        SettingsInfoItem(
+                            stringResource(R.string.last_updated),
+                            packageInfo?.lastUpdateTime?.let { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(it) } ?: "unknown"
                         )
                     }
                 }
             }
 
-            // 3. Device Information (sticky header)
-            stickyHeader {
-                Text(
-                    text = stringResource(R.string.section_device_info),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                )
-            }
+            // 5. Runtime Diagnostics
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                SettingsGroup(title = stringResource(R.string.section_diagnostics)) {
                     Column(
                         modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        DiagnosticListItem(
-                            label = stringResource(R.string.device_label),
-                            value = "${Build.MANUFACTURER} ${Build.MODEL}",
-                        )
-                        DiagnosticListItem(
-                            label = stringResource(R.string.android_version),
-                            value = Build.VERSION.RELEASE,
-                        )
-                        DiagnosticListItem(
-                            label = stringResource(R.string.sdk_int),
-                            value = Build.VERSION.SDK_INT.toString(),
-                        )
-                        DiagnosticListItem(
-                            label = stringResource(R.string.board),
-                            value = Build.BOARD,
-                        )
-                        DiagnosticListItem(
-                            label = stringResource(R.string.brand),
-                            value = Build.BRAND,
-                        )
-                    }
-                }
-            }
-
-            // 4. Package Information (sticky header)
-            stickyHeader {
-                Text(
-                    text = stringResource(R.string.section_package_info),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                )
-            }
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        DiagnosticListItem(
-                            label = stringResource(R.string.package_name),
-                            value = packageName,
-                        )
-                        DiagnosticListItem(
-                            label = stringResource(R.string.first_install),
-                            value = packageInfo?.firstInstallTime?.let { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(it) } ?: "unknown",
-                        )
-                        DiagnosticListItem(
-                            label = stringResource(R.string.last_updated),
-                            value = packageInfo?.lastUpdateTime?.let { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(it) } ?: "unknown",
-                        )
-                    }
-                }
-            }
-
-            // 5. Runtime Diagnostics (sticky header)
-            stickyHeader {
-                Text(
-                    text = stringResource(R.string.section_diagnostics),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                )
-            }
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (events.any { it.category == "ERROR" })
-                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
-                        else
-                            MaterialTheme.colorScheme.surface,
-                    ),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -483,27 +305,32 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         } else {
-                            LazyColumn(
-                                modifier = Modifier.heightIn(max = 300.dp),
+                            Column(
+                                modifier = Modifier.heightIn(max = 400.dp),
                                 verticalArrangement = Arrangement.spacedBy(2.dp),
                             ) {
-                                items(events) { event ->
-                                    ListItem(
-                                        headlineContent = {
-                                            Text(
-                                                text = "[${event.category}] ${event.message}",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                fontFamily = FontFamily.Monospace,
-                                            )
-                                        },
-                                        supportingContent = {
-                                            Text(
-                                                text = event.timestamp,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        },
-                                    )
+                                LazyColumn(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    items(events) { event ->
+                                        ListItem(
+                                            headlineContent = {
+                                                Text(
+                                                    text = "[${event.category}] ${event.message}",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontFamily = FontFamily.Monospace,
+                                                )
+                                            },
+                                            supportingContent = {
+                                                Text(
+                                                    text = event.timestamp,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            },
+                                            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -512,6 +339,147 @@ fun SettingsScreen(
             }
         }
     }
+}
+
+@Composable
+private fun SettingsGroup(
+    title: String,
+    content: @Composable () -> Unit
+) {
+    Column {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Normal,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            shape = RoundedCornerShape(28.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SettingsHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 16.dp)
+    )
+}
+
+@Composable
+private fun SettingsInfoItem(label: String, value: String) {
+    ListItem(
+        headlineContent = { Text(label, style = MaterialTheme.typography.labelLarge) },
+        supportingContent = {
+            Text(
+                value,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+    )
+}
+
+@Composable
+private fun SettingsSliderItem(
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int = 0,
+    valueDisplay: String
+) {
+    ListItem(
+        headlineContent = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(label, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    text = valueDisplay,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        },
+        supportingContent = {
+            Slider(
+                value = value,
+                onValueChange = onValueChange,
+                valueRange = valueRange,
+                steps = steps,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun <T> SettingsDropdownItem(
+    label: String,
+    value: String,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    options: List<T>,
+    optionLabel: @Composable (T) -> String,
+    onOptionClick: (T) -> Unit
+) {
+    ListItem(
+        headlineContent = { Text(label, style = MaterialTheme.typography.bodyLarge) },
+        supportingContent = {
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = onExpandedChange,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            ) {
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = {},
+                    readOnly = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(type = ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled = true),
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(
+                        unfocusedContainerColor = Color.Transparent,
+                        focusedContainerColor = Color.Transparent
+                    ),
+                    textStyle = MaterialTheme.typography.bodyMedium
+                )
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { onExpandedChange(false) },
+                ) {
+                    options.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(optionLabel(option)) },
+                            onClick = { onOptionClick(option) },
+                            contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                        )
+                    }
+                }
+            }
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+    )
 }
 
 /**
@@ -547,24 +515,4 @@ fun focusModeDisplayName(mode: FocusMode?): String {
         FocusMode.EDGE -> stringResource(R.string.focus_edge)
         null -> stringResource(R.string.mode_auto)
     }
-}
-
-/**
- * Diagnostic row using ListItem with headlineContent + supportingContent.
- */
-@Composable
-private fun DiagnosticListItem(
-    label: String,
-    value: String,
-) {
-    ListItem(
-        headlineContent = { Text(text = label, style = MaterialTheme.typography.bodyMedium) },
-        supportingContent = {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        },
-    )
 }

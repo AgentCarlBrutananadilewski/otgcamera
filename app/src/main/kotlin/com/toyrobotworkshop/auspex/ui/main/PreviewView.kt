@@ -20,18 +20,15 @@ import com.toyrobotworkshop.auspex.camera.Size
  * that keeps the preview letterboxed/pillarboxed at the camera's native aspect ratio,
  * rather than stretching to fill the available space.
  *
- * The transform works in two steps:
- *  1. Scale the texture down uniformly so its longer dimension fits the view.
- *  2. Translate it to centre it within the view.
- *
  * This is done in [onSurfaceTextureSizeChanged] (view resized) and whenever
- * [cameraResolution] changes (new camera connected with different resolution).
+ * [cameraResolution] or [deviceRotation] changes.
  * Both cases cause [updateTransform] to run.
  */
 @Composable
 fun PreviewView(
     modifier: Modifier = Modifier,
     cameraResolution: Size?,
+    deviceRotation: Int = 0,
     onSurfaceReady: (SurfaceTexture) -> Unit,
     onSurfaceDestroyed: (SurfaceTexture) -> Unit,
 ) {
@@ -41,11 +38,11 @@ fun PreviewView(
     // cameraResolution arrives (which happens after the view is already laid out).
     val textureViewRef = remember { androidx.compose.runtime.mutableStateOf<TextureView?>(null) }
 
-    // Re-apply the transform whenever the known resolution changes
-    androidx.compose.runtime.LaunchedEffect(cameraResolution) {
+    // Re-apply the transform whenever the known resolution or device rotation changes
+    androidx.compose.runtime.LaunchedEffect(cameraResolution, deviceRotation) {
         textureViewRef.value?.let { tv ->
             if (tv.width > 0 && tv.height > 0) {
-                updateTransform(tv, tv.width, tv.height, cameraResolution)
+                updateTransform(tv, tv.width, tv.height, cameraResolution, deviceRotation)
             }
         }
     }
@@ -78,7 +75,7 @@ fun PreviewView(
                         width: Int,
                         height: Int,
                     ) {
-                        updateTransform(this@apply, width, height, cameraResolution)
+                        updateTransform(this@apply, width, height, cameraResolution, deviceRotation)
                         onSurfaceReady(surfaceTexture)
                     }
 
@@ -88,7 +85,7 @@ fun PreviewView(
                         height: Int,
                     ) {
                         // View was resized (orientation change, window resize) — recompute transform
-                        updateTransform(this@apply, width, height, cameraResolution)
+                        updateTransform(this@apply, width, height, cameraResolution, deviceRotation)
                     }
 
                     override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
@@ -115,49 +112,54 @@ fun PreviewView(
 /**
  * Compute and apply an aspect-ratio-preserving transform to [textureView].
  *
- * The TextureView draws its SurfaceTexture by mapping the texture rectangle to the
- * view rectangle, which stretches it when the aspect ratios differ. We correct this
- * by applying an inverse scale + centering translation via [TextureView.setTransform].
- *
- * If [cameraResolution] is null (camera not yet ready), the identity matrix is applied
- * so the view renders normally until the resolution is known.
+ * This version implements "Width-First" scaling:
+ * - Portrait (0/180°): Scale is based on video width.
+ * - Landscape (90/270°): Scale is based on video height.
+ * This ensures the image always spans the full width of the device screen
+ * without squashing or stretching.
  */
 private fun updateTransform(
     textureView: TextureView,
     viewWidth: Int,
     viewHeight: Int,
     cameraResolution: Size?,
+    deviceRotation: Int = 0,
 ) {
     if (cameraResolution == null || viewWidth == 0 || viewHeight == 0) {
         textureView.setTransform(Matrix())
         return
     }
 
+    val matrix = Matrix()
+
+    // 1. Physical dimensions of the camera buffer
     val camW = cameraResolution.width.toFloat()
     val camH = cameraResolution.height.toFloat()
 
-    // Scale factors to fit the camera frame inside the view
-    val scaleX = camW / viewWidth
-    val scaleY = camH / viewHeight
+    // 2. Determine which camera dimension becomes the visual "width"
+    val isRotated = deviceRotation == 90 || deviceRotation == 270
+    val visualContentWidth = if (isRotated) camH else camW
 
-    // Use the larger scale factor so the frame fits entirely within the view (letterbox/pillarbox)
-    val scale = maxOf(scaleX, scaleY)
+    // 3. View center
+    val centerX = viewWidth / 2f
+    val centerY = viewHeight / 2f
 
-    // Scaled dimensions of the camera frame in view-space
-    val scaledW = camW / scale
-    val scaledH = camH / scale
+    // 4. Step-by-step Matrix assembly:
+    
+    // A. Undo the TextureView default stretch.
+    // It maps buffer(camW, camH) -> view(viewWidth, viewHeight).
+    // We scale by the inverse to get back to a 1:1 pixel representation.
+    matrix.setScale(camW / viewWidth, camH / viewHeight, centerX, centerY)
 
-    // TextureView stretches its SurfaceTexture to fill the view by default.
-    // setTransform() applies a matrix in view-pixel space to undo that stretch.
-    // We scale each axis independently so the camera frame fits inside the view,
-    // using the view centre as the pivot so the result is automatically centred
-    // (no extra translation needed — the pivot handles it exactly).
-    val matrix = Matrix()
-    matrix.setScale(
-        scaledW / viewWidth,   // x scale: fraction of view width the frame should occupy
-        scaledH / viewHeight,  // y scale: fraction of view height the frame should occupy
-        viewWidth  / 2f,       // pivot x: view centre
-        viewHeight / 2f,       // pivot y: view centre
-    )
+    // B. Apply rotation to keep the image upright.
+    if (deviceRotation != 0) {
+        matrix.postRotate(deviceRotation.toFloat(), centerX, centerY)
+    }
+
+    // C. Apply uniform "Width-First" scale.
+    // We want visualContentWidth to match viewWidth.
+    val finalScale = viewWidth / visualContentWidth
+    matrix.postScale(finalScale, finalScale, centerX, centerY)
+
     textureView.setTransform(matrix)
 }

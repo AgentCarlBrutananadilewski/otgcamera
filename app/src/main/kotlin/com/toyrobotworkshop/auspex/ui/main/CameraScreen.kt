@@ -1,12 +1,15 @@
 package com.toyrobotworkshop.auspex.ui.main
 
 import android.Manifest
+import android.view.OrientationEventListener
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -17,12 +20,15 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -47,6 +53,9 @@ fun CameraScreen(
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
+
+    // Track physical device rotation via sensor
+    val deviceRotationDegrees by rememberDeviceRotation()
 
     // Runtime permissions
     val permissionsLauncher = rememberLauncherForActivityResult(
@@ -137,18 +146,25 @@ fun CameraScreen(
                 BottomAppBar(
                     containerColor = Color.Black,
                     contentPadding = PaddingValues(horizontal = 8.dp),
+                    modifier = Modifier.height(200.dp),
                 ) {
                     // ── Left: navigation ──────────────────────────────
                     CameraIconButton(
                         imageVector = Icons.Rounded.PhotoLibrary,
                         contentDescription = stringResource(R.string.action_gallery),
                         onClick = { /* TODO: gallery */ },
+                        modifier = Modifier.offset(y = (-25).dp),
+                        rotation = deviceRotationDegrees,
+                        buttonSize = 80.dp,
                     )
                     Spacer(Modifier.width(8.dp))
                     CameraIconButton(
                         imageVector = Icons.Rounded.Settings,
                         contentDescription = stringResource(R.string.action_settings),
                         onClick = onSettingsClick,
+                        modifier = Modifier
+                            .offset(x = (15).dp),
+                        rotation = deviceRotationDegrees,
                     )
 
                     Spacer(Modifier.weight(1f))
@@ -169,6 +185,9 @@ fun CameraScreen(
                             }
                         },
                         containerColor = if (isRecording) Color(0xFFB71C1C) else Color(0xFF2A2A2A),
+                        modifier = Modifier
+                            .offset(x = (-15).dp),
+                        rotation = deviceRotationDegrees,
                     )
                     Spacer(Modifier.width(8.dp))
                     // Shutter — always tappable, even while recording
@@ -176,6 +195,9 @@ fun CameraScreen(
                         imageVector = Icons.Rounded.CameraAlt,
                         contentDescription = stringResource(R.string.capture_photo),
                         onClick = { viewModel.capturePhoto(FileSaver.getPhotoPath(context.cacheDir)) },
+                        modifier = Modifier.offset(y = (-25).dp),
+                        rotation = deviceRotationDegrees,
+                        buttonSize = 80.dp,
                     )
                     Spacer(Modifier.width(8.dp))
                 }
@@ -192,6 +214,7 @@ fun CameraScreen(
                 PreviewView(
                     modifier = Modifier.fillMaxSize(),
                     cameraResolution = uiState.resolution,
+                    deviceRotation = deviceRotationDegrees.toInt(),
                     onSurfaceReady = { surfaceTexture ->
                         viewModel.setPreviewSurface(surfaceTexture)
                     },
@@ -259,10 +282,20 @@ private fun CameraIconButton(
     modifier: Modifier = Modifier,
     containerColor: Color = Color(0xFF2A2A2A),
     contentColor: Color = Color.White,
+    rotation: Float = 0f,
+    buttonSize: Dp = 64.dp,
 ) {
+    val animatedRotation by animateFloatAsState(
+        targetValue = rotation,
+        animationSpec = tween(durationMillis = 300),
+        label = "ButtonRotation"
+    )
+
     FilledIconButton(
         onClick = onClick,
-        modifier = modifier.size(52.dp),
+        modifier = modifier
+            .size(buttonSize)
+            .rotate(animatedRotation),
         colors = IconButtonDefaults.filledIconButtonColors(
             containerColor = containerColor,
             contentColor = contentColor,
@@ -271,7 +304,44 @@ private fun CameraIconButton(
         Icon(
             imageVector = imageVector,
             contentDescription = contentDescription,
-            modifier = Modifier.size(24.dp),
+            modifier = Modifier.size(buttonSize / 2),
         )
     }
+}
+
+/**
+ * Remembers the physical device rotation in degrees (0, 90, 180, 270) based on sensor data.
+ * Useful when the Activity is locked to a specific orientation.
+ */
+@Composable
+fun rememberDeviceRotation(): State<Float> {
+    val context = LocalContext.current
+    val rotation = remember { mutableFloatStateOf(0f) }
+
+    DisposableEffect(context) {
+        val listener = object : OrientationEventListener(context) {
+            override fun onOrientationChanged(orientation: Int) {
+                if (orientation == ORIENTATION_UNKNOWN) return
+
+                // Map raw degrees into 90-degree steps for UI rotation
+                val newRotation = when (orientation) {
+                    in 45 until 135 -> 270f // Landscape Right
+                    in 135 until 225 -> 180f // Reverse Portrait
+                    in 225 until 315 -> 90f  // Landscape Left
+                    else -> 0f               // Portrait
+                }
+
+                if (rotation.floatValue != newRotation) {
+                    rotation.floatValue = newRotation
+                }
+            }
+        }
+
+        listener.enable()
+        onDispose {
+            listener.disable()
+        }
+    }
+
+    return rotation
 }

@@ -118,8 +118,8 @@ fun AuspexTheme(
             WindowCompat.setDecorFitsSystemWindows(window, false)
 
             // Transparent bars — content draws behind them, system handles contrast scrim
-            window.statusBarColor     = AndroidColor.TRANSPARENT
-            window.navigationBarColor = AndroidColor.TRANSPARENT
+            //window.statusBarColor     = AndroidColor.TRANSPARENT
+            //window.navigationBarColor = AndroidColor.TRANSPARENT
 
             // Match icon/handle appearance to active theme
             WindowInsetsControllerCompat(window, view).apply {
