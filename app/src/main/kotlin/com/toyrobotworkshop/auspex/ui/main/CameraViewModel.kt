@@ -18,6 +18,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -38,6 +39,7 @@ class CameraViewModel @Inject constructor(
 
     // Camera interface (set after backend detection)
     private var camera: CameraInterface? = null
+    private var stateCollectionJob: Job? = null
 
     // SurfaceTexture from PreviewView
     private var surfaceTexture: SurfaceTexture? = null
@@ -45,6 +47,7 @@ class CameraViewModel @Inject constructor(
     // Broadcast receiver for USB plug/unplug events from UsbReceiver
     private val usbEventReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
+            Log.d(tag, "Received USB broadcast: ${intent.action}")
             when (intent.action) {
                 UsbReceiver.ACTION_USB_CAMERA_FOUND -> {
                     val device = intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE)
@@ -151,6 +154,9 @@ class CameraViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(status = CameraStatus.Initializing)
             camera = cameraManager.initializeCamera2(cameraId)
             val cam = camera!!
+            
+            observeCameraState(cam)
+
             _uiState.value = _uiState.value.copy(
                 status = CameraStatus.Ready,
                 backendType = CameraInterface.BackendType.CAMERA2,
@@ -179,44 +185,9 @@ class CameraViewModel @Inject constructor(
             )
 
             camera = cameraManager.initializeUVC(device, activityContext)
-
-            // Collect state changes via flow instead of polling
             val cam = camera ?: return
 
-            // Launch a background collector to update UI on state changes
-            viewModelScope.launch {
-                cam.stateFlow.collect { state ->
-                    when (state) {
-                        is CameraInterface.State.Ready -> {
-                            _uiState.value = _uiState.value.copy(
-                                status = CameraStatus.Ready,
-                                backendType = CameraInterface.BackendType.UVCCAMERA,
-                                // Expose the actual resolution so PreviewView can constrain its aspect ratio
-                                resolution = cam.resolution,
-                                controls = cam.controls,
-                                message = "UVC camera ready"
-                            )
-                            Log.d(tag, "UVC backend ready, resolution=${cam.resolution}")
-                        }
-
-                        is CameraInterface.State.Error -> {
-                            _uiState.value = _uiState.value.copy(
-                                status = CameraStatus.Error(state.message),
-                                message = state.message
-                            )
-                        }
-
-                        else -> {
-                            // Still initializing — update message periodically
-                            if (state == CameraInterface.State.Initializing) {
-                                _uiState.value = _uiState.value.copy(
-                                    message = "Waiting for USB permission..."
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+            observeCameraState(cam)
 
             // Wait for a terminal state (Ready or Error) with timeout
             val job = viewModelScope.launch {
@@ -243,6 +214,55 @@ class CameraViewModel @Inject constructor(
                 status = CameraStatus.Error(e.message ?: "Unknown error"),
                 message = "Failed to initialize camera: ${e.message}"
             )
+        }
+    }
+
+    private fun observeCameraState(cam: CameraInterface) {
+        stateCollectionJob?.cancel()
+        stateCollectionJob = viewModelScope.launch {
+            cam.stateFlow.collect { state ->
+                when (state) {
+                    is CameraInterface.State.Ready -> {
+                        _uiState.value = _uiState.value.copy(
+                            status = CameraStatus.Ready,
+                            backendType = if (cam is com.toyrobotworkshop.auspex.camera.camera2.Camera2Backend)
+                                CameraInterface.BackendType.CAMERA2
+                            else
+                                CameraInterface.BackendType.UVCCAMERA,
+                            resolution = cam.resolution,
+                            controls = cam.controls,
+                            message = if (cam is com.toyrobotworkshop.auspex.camera.camera2.Camera2Backend)
+                                "Camera2 backend ready"
+                            else
+                                "UVC camera ready"
+                        )
+                        Log.d(tag, "Camera ready, resolution=${cam.resolution}")
+                    }
+
+                    is CameraInterface.State.Error -> {
+                        _uiState.value = _uiState.value.copy(
+                            status = CameraStatus.Error(state.message),
+                            message = state.message
+                        )
+                    }
+
+                    CameraInterface.State.Idle -> {
+                        Log.d(tag, "Camera backend transitioned to Idle (disconnected)")
+                        _uiState.value = _uiState.value.copy(
+                            status = CameraStatus.NoCamera,
+                            message = "Camera disconnected"
+                        )
+                    }
+
+                    CameraInterface.State.Initializing -> {
+                        _uiState.value = _uiState.value.copy(
+                            message = "Waiting for camera..."
+                        )
+                    }
+
+                    else -> {}
+                }
+            }
         }
     }
 

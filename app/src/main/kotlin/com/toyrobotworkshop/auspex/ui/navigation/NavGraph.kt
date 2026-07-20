@@ -5,6 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -40,19 +41,20 @@ fun NavGraph(
 
     // Auto-navigate: camera → no_device when camera is lost
     LaunchedEffect(uiState.status) {
+        val currentDest = navController.currentDestination
         when (uiState.status) {
             CameraStatus.NoCamera -> {
-                if (!navController.currentBackStackEntry?.destination?.route.isNullOrEmpty()) {
+                if (currentDest?.hasRoute<Screen.Camera>() == true) {
                     navController.navigate(Screen.NoDevice) {
-                        popUpTo(navController.graph.id) { inclusive = true }
+                        popUpTo(Screen.Camera) { inclusive = true }
                     }
                 }
             }
             // Auto-navigate: no_device → camera when camera reconnects and becomes ready
             CameraStatus.Ready, CameraStatus.Previewing -> {
-                if (!navController.currentBackStackEntry?.destination?.route.isNullOrEmpty()) {
+                if (currentDest?.hasRoute<Screen.NoDevice>() == true) {
                     navController.navigate(Screen.Camera) {
-                        popUpTo(navController.graph.id) { inclusive = true }
+                        popUpTo(Screen.NoDevice) { inclusive = true }
                     }
                 }
             }

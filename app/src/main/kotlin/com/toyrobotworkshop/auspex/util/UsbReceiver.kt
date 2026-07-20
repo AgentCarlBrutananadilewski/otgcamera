@@ -30,6 +30,7 @@ class UsbReceiver : BroadcastReceiver() {
                     Log.d(tag, "UVC camera attached: ${device?.deviceName}")
                     context.sendBroadcast(Intent(ACTION_USB_CAMERA_FOUND).apply {
                         putExtra(UsbManager.EXTRA_DEVICE, device)
+                        setPackage(context.packageName)
                     })
                 }
             }
@@ -38,7 +39,9 @@ class UsbReceiver : BroadcastReceiver() {
                 val device = intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE)
                 if (isUvcDevice(device)) {
                     Log.d(tag, "UVC camera detached: ${device?.deviceName}")
-                    context.sendBroadcast(Intent(ACTION_USB_CAMERA_LOST))
+                    context.sendBroadcast(Intent(ACTION_USB_CAMERA_LOST).apply {
+                        setPackage(context.packageName)
+                    })
                 }
             }
         }
