@@ -1,8 +1,13 @@
 package com.toyrobotworkshop.auspex.ui.main
 
 import android.Manifest
+import android.view.WindowManager
+import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CameraAlt
@@ -21,6 +26,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.toyrobotworkshop.auspex.R
 import com.toyrobotworkshop.auspex.util.FileSaver
 
@@ -39,41 +48,80 @@ fun CameraScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
 
-    // Runtime CAMERA permission
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-    ) { isGranted ->
-        if (isGranted) {
+    // Runtime permissions
+    val permissionsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+    ) { perms ->
+        val cameraGranted = perms[Manifest.permission.CAMERA] == true
+        if (cameraGranted) {
             viewModel.detectAndInitialize(context)
         }
     }
 
-    // Request permission on launch
+    // Request permissions on launch
     LaunchedEffect(Unit) {
-        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        val permissions = mutableListOf(Manifest.permission.CAMERA)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        permissionsLauncher.launch(permissions.toTypedArray())
     }
 
-    // Keep screen on only when camera is ready/previewing
+    // Keep screen on while the camera screen is being viewed
     val view = androidx.compose.ui.platform.LocalView.current
-    DisposableEffect(uiState.status) {
-        val shouldKeepOn = uiState.status == CameraStatus.Ready || uiState.status == CameraStatus.Previewing
-        if (shouldKeepOn) {
-            view.keepScreenOn = true
-        }
+    DisposableEffect(Unit) {
+        val window = (context as? android.app.Activity)?.window
+        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         onDispose {
-            view.keepScreenOn = false
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
 
-    // Hide status bar while camera screen is active
-    val activity = (context as? android.app.Activity)
-    DisposableEffect(Unit) {
-        val controller = activity?.window?.let {
-            WindowCompat.getInsetsController(it, it.decorView)
+    // Hide status bar and force black navigation bar while camera screen is active
+    val activity = (context as? ComponentActivity)
+    val isDarkTheme = isSystemInDarkTheme()
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val controller = activity?.window?.let {
+                    WindowCompat.getInsetsController(it, it.decorView)
+                }
+
+                // Force navigation bar to be dark (black background, light icons)
+                activity?.enableEdgeToEdge(
+                    statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+                    navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                )
+
+                // Configure the system bars to stay hidden until a swipe
+                controller?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                
+                // On cold start, the system may ignore the hide call if it happens too early.
+                // Re-triggering on RESUME and using post ensure it's applied when the window is ready.
+                view.post {
+                    controller?.hide(WindowInsetsCompat.Type.statusBars())
+                }
+            }
         }
-        controller?.hide(WindowInsetsCompat.Type.statusBars())
+        lifecycleOwner.lifecycle.addObserver(observer)
+
         onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            
+            val controller = activity?.window?.let {
+                WindowCompat.getInsetsController(it, it.decorView)
+            }
             controller?.show(WindowInsetsCompat.Type.statusBars())
+            
+            // Restore theme-dependent system bar styling when leaving the screen
+            activity?.enableEdgeToEdge(
+                statusBarStyle = if (isDarkTheme) SystemBarStyle.dark(android.graphics.Color.TRANSPARENT) 
+                                 else SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+                navigationBarStyle = if (isDarkTheme) SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                                     else SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
+            )
         }
     }
 
@@ -87,7 +135,7 @@ fun CameraScreen(
         bottomBar = {
             if (isCameraReady) {
                 BottomAppBar(
-                    containerColor = Color(0xCC000000),
+                    containerColor = Color.Black,
                     contentPadding = PaddingValues(horizontal = 8.dp),
                 ) {
                     // ── Left: navigation ──────────────────────────────

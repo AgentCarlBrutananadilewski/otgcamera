@@ -13,7 +13,6 @@ fun getBuildCounter(): Int {
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.compose.compiler)
@@ -25,20 +24,29 @@ val buildNum = getBuildCounter()
 
 android {
     namespace = "com.toyrobotworkshop.auspex"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.toyrobotworkshop.auspex"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 37
         versionCode = buildNum
         versionName = "0.1.$buildNum"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Build-time diagnostics injected into BuildConfig
-        buildConfigField("String", "BUILD_TIME", "\"${Instant.now().toString()}\"")
-        buildConfigField("String", "GIT_SHA", "\"${providers.exec { commandLine("git", "rev-parse", "--short", "HEAD") }.standardOutput.asText.get().trim()}\"")
+        buildConfigField("String", "BUILD_TIME", "\"${Instant.now()}\"")
+        
+        val gitSha = try {
+            providers.exec {
+                commandLine("git", "rev-parse", "--short", "HEAD")
+            }.standardOutput.asText.get().trim()
+        } catch (_: Exception) {
+            "unknown"
+        }
+        buildConfigField("String", "GIT_SHA", "\"$gitSha\"")
+        
         buildConfigField("int", "BUILD_NUMBER", "$buildNum")
     }
 
@@ -57,21 +65,9 @@ android {
         }
     }
 
-    android.applicationVariants.all {
-        outputs.forEach { output ->
-            val variantName = name.replace("Debug", "debug").replace("Release", "release")
-            (output as? com.android.build.gradle.internal.api.BaseVariantOutputImpl)?.outputFileName =
-                "auspex-${variantName}.apk"
-        }
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
     }
 
     buildFeatures {
@@ -82,6 +78,21 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.outputs.forEach { output ->
+            val variantName = variant.name.lowercase()
+            output.outputFileName.set("auspex-${variantName}.apk")
         }
     }
 }
@@ -98,6 +109,7 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.activity)
 
     // Material Icons (core + extended for Material Symbols)
     implementation(libs.androidx.material.icons.core)

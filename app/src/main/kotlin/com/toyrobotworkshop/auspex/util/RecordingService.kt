@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Binder
 import android.os.IBinder
 import android.os.Build
@@ -59,7 +60,11 @@ class RecordingService : Service() {
                 outputPath = intent.getStringExtra(EXTRA_OUTPUT_PATH)
                 createNotificationChannel()
                 val notification = buildNotification()
-                startForeground(NOTIFICATION_ID, notification)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA)
+                } else {
+                    startForeground(NOTIFICATION_ID, notification)
+                }
                 // TODO: Start actual recording via MediaCodec
             }
             ACTION_STOP -> {

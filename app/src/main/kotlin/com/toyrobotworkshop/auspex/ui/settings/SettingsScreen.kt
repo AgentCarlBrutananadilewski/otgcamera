@@ -129,7 +129,7 @@ fun SettingsScreen(
                                 modifier = Modifier.weight(1f),
                             )
                             Text(
-                                text = "${(controls.exposureTimeNs ?: 0L / 1_000)} µs",
+                                text = "${((controls.exposureTimeNs ?: 0L) / 1_000)} µs",
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.padding(start = 8.dp),
                             )
@@ -171,13 +171,13 @@ fun SettingsScreen(
                                 label = { Text(stringResource(R.string.white_balance_label)) },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .menuAnchor(),
+                                    .menuAnchor(type = ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled = true),
                             )
                             ExposedDropdownMenu(
                                 expanded = wbExpanded,
                                 onDismissRequest = { wbExpanded = false },
                             ) {
-                                WhiteBalanceMode.values().forEach { mode ->
+                                WhiteBalanceMode.entries.forEach { mode ->
                                     DropdownMenuItem(
                                         text = { Text(whiteBalanceDisplayName(mode)) },
                                         onClick = {
@@ -203,13 +203,13 @@ fun SettingsScreen(
                                 label = { Text(stringResource(R.string.focus_mode_label)) },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .menuAnchor(),
+                                    .menuAnchor(type = ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled = true),
                             )
                             ExposedDropdownMenu(
                                 expanded = focusExpanded,
                                 onDismissRequest = { focusExpanded = false },
                             ) {
-                                FocusMode.values().forEach { mode ->
+                                FocusMode.entries.forEach { mode ->
                                     DropdownMenuItem(
                                         text = { Text(focusModeDisplayName(mode)) },
                                         onClick = {
